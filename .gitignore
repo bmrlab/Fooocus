@@ -2,12 +2,16 @@ __pycache__
 *.ckpt
 *.safetensors
 *.pth
+*.pt
 *.bin
 *.patch
+*.backup
+*.corrupted
 lena.png
 lena_result.png
 lena_test.py
 user_path_config.txt
+build_chb.py
 /modules/*.png
 /repositories
 /venv
@@ -26,7 +30,8 @@ user_path_config.txt
 /interrogate
 /user.css
 /.idea
-notification.mp3
+/notification.ogg
+/notification.mp3
 /SwinIR
 /textual_inversion
 .vscode

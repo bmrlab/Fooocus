@@ -20,13 +20,13 @@ def worker():
     import modules.flags as flags
     import modules.path
     import modules.patch
-    import comfy.model_management
+    import fcbh.model_management
     import fooocus_extras.preprocessors as preprocessors
     import modules.inpaint_worker as inpaint_worker
     import modules.advanced_parameters as advanced_parameters
     import fooocus_extras.ip_adapter as ip_adapter
 
-    from modules.sdxl_styles import apply_style, aspect_ratios, fooocus_expansion
+    from modules.sdxl_styles import apply_style, apply_wildcards, aspect_ratios, fooocus_expansion
     from modules.private_logger import log
     from modules.expansion import safe_str
     from modules.util import join_prompts, remove_empty_str, HWC3, resize_image, image_is_generated_in_current_ui, make_sure_that_image_is_not_too_large
@@ -114,6 +114,7 @@ def worker():
         inpaint_worker.current_task = None
         width, height = aspect_ratios[aspect_ratios_selection]
         skip_prompt_processing = False
+        refiner_swap_method = advanced_parameters.refiner_swap_method
 
         raw_prompt = prompt
         raw_negative_prompt = negative_prompt
@@ -178,7 +179,7 @@ def worker():
                     loras += [(inpaint_patch_model_path, 1.0)]
                     print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                     goals.append('inpaint')
-                    sampler_name = 'dpmpp_fooocus_2m_sde_inpaint_seamless'
+                    sampler_name = 'dpmpp_2m_sde_gpu'  # only support the patched dpmpp_2m_sde_gpu
             if current_tab == 'ip' or \
                     advanced_parameters.mixing_image_prompt_and_inpaint or \
                     advanced_parameters.mixing_image_prompt_and_vary_upscale:
@@ -228,52 +229,60 @@ def worker():
             pipeline.refresh_everything(refiner_model_name=refiner_model_name, base_model_name=base_model_name, loras=loras)
 
             progressbar(3, 'Processing prompts ...')
-            positive_basic_workloads = []
-            negative_basic_workloads = []
+            tasks = []
+            for i in range(image_number):
+                task_seed = seed + i
+                task_prompt = apply_wildcards(prompt, task_seed)
+                task_negative_prompt = apply_wildcards(negative_prompt, task_seed)
+                task_extra_positive_prompts = [apply_wildcards(pmt, task_seed) for pmt in extra_positive_prompts]
+                task_extra_negative_prompts = [apply_wildcards(pmt, task_seed) for pmt in extra_negative_prompts]
 
-            if use_style:
-                for s in style_selections:
-                    p, n = apply_style(s, positive=prompt)
-                    positive_basic_workloads.append(p)
-                    negative_basic_workloads.append(n)
-            else:
-                positive_basic_workloads.append(prompt)
+                positive_basic_workloads = []
+                negative_basic_workloads = []
 
-            negative_basic_workloads.append(negative_prompt)  # Always use independent workload for negative.
+                if use_style:
+                    for s in style_selections:
+                        p, n = apply_style(s, positive=task_prompt)
+                        positive_basic_workloads.append(p)
+                        negative_basic_workloads.append(n)
+                else:
+                    positive_basic_workloads.append(task_prompt)
 
-            positive_basic_workloads = positive_basic_workloads + extra_positive_prompts
-            negative_basic_workloads = negative_basic_workloads + extra_negative_prompts
+                negative_basic_workloads.append(task_negative_prompt)  # Always use independent workload for negative.
 
-            positive_basic_workloads = remove_empty_str(positive_basic_workloads, default=prompt)
-            negative_basic_workloads = remove_empty_str(negative_basic_workloads, default=negative_prompt)
+                positive_basic_workloads = positive_basic_workloads + task_extra_positive_prompts
+                negative_basic_workloads = negative_basic_workloads + task_extra_negative_prompts
 
-            positive_top_k = len(positive_basic_workloads)
-            negative_top_k = len(negative_basic_workloads)
+                positive_basic_workloads = remove_empty_str(positive_basic_workloads, default=task_prompt)
+                negative_basic_workloads = remove_empty_str(negative_basic_workloads, default=task_negative_prompt)
 
-            tasks = [dict(
-                task_seed=seed + i,
-                positive=positive_basic_workloads,
-                negative=negative_basic_workloads,
-                expansion='',
-                c=None,
-                uc=None,
-            ) for i in range(image_number)]
+                tasks.append(dict(
+                    task_seed=task_seed,
+                    task_prompt=task_prompt,
+                    positive=positive_basic_workloads,
+                    negative=negative_basic_workloads,
+                    expansion='',
+                    c=None,
+                    uc=None,
+                    positive_top_k=len(positive_basic_workloads),
+                    negative_top_k=len(negative_basic_workloads)
+                ))
 
             if use_expansion:
                 for i, t in enumerate(tasks):
                     progressbar(5, f'Preparing Fooocus text #{i + 1} ...')
-                    expansion = pipeline.final_expansion(prompt, t['task_seed'])
+                    expansion = pipeline.final_expansion(t['task_prompt'], t['task_seed'])
                     print(f'[Prompt Expansion] New suffix: {expansion}')
                     t['expansion'] = expansion
-                    t['positive'] = copy.deepcopy(t['positive']) + [join_prompts(prompt, expansion)]  # Deep copy.
+                    t['positive'] = copy.deepcopy(t['positive']) + [join_prompts(t['task_prompt'], expansion)]  # Deep copy.
 
             for i, t in enumerate(tasks):
                 progressbar(7, f'Encoding positive #{i + 1} ...')
-                t['c'] = pipeline.clip_encode(texts=t['positive'], pool_top_k=positive_top_k)
+                t['c'] = pipeline.clip_encode(texts=t['positive'], pool_top_k=t['positive_top_k'])
 
             for i, t in enumerate(tasks):
                 progressbar(10, f'Encoding negative #{i + 1} ...')
-                t['uc'] = pipeline.clip_encode(texts=t['negative'], pool_top_k=negative_top_k)
+                t['uc'] = pipeline.clip_encode(texts=t['negative'], pool_top_k=t['negative_top_k'])
 
         if len(goals) > 0:
             progressbar(13, 'Image processing ...')
@@ -354,11 +363,14 @@ def worker():
             initial_pixels = core.numpy_to_pytorch(uov_input_image)
             progressbar(13, 'VAE encoding ...')
 
-            initial_latent = core.encode_vae(vae=pipeline.final_vae, pixels=initial_pixels, tiled=True)
+            initial_latent = core.encode_vae(
+                vae=pipeline.final_vae if pipeline.final_refiner_vae is None else pipeline.final_refiner_vae,
+                pixels=initial_pixels, tiled=True)
             B, C, H, W = initial_latent['samples'].shape
             width = W * 8
             height = H * 8
             print(f'Final resolution is {str((height, width))}.')
+            refiner_swap_method = 'upscale'
 
         if 'inpaint' in goals:
             if len(outpaint_selections) > 0:
@@ -388,36 +400,44 @@ def worker():
             inpaint_worker.current_task = inpaint_worker.InpaintWorker(image=inpaint_image, mask=inpaint_mask,
                                                                        is_outpaint=len(outpaint_selections) > 0)
 
-            # print(f'Inpaint task: {str((height, width))}')
+            pipeline.final_unet.model.diffusion_model.in_inpaint = True
+
             # outputs.append(['results', inpaint_worker.current_task.visualize_mask_processing()])
             # return
 
+            progressbar(13, 'VAE Inpaint encoding ...')
+
+            inpaint_pixel_fill = core.numpy_to_pytorch(inpaint_worker.current_task.interested_fill)
+            inpaint_pixel_image = core.numpy_to_pytorch(inpaint_worker.current_task.interested_image)
+            inpaint_pixel_mask = core.numpy_to_pytorch(inpaint_worker.current_task.interested_mask)
+
+            latent_inpaint, latent_mask = core.encode_vae_inpaint(
+                mask=inpaint_pixel_mask,
+                vae=pipeline.final_vae,
+                pixels=inpaint_pixel_image)
+
+            latent_swap = None
+            if pipeline.final_refiner_vae is not None:
+                progressbar(13, 'VAE Inpaint SD15 encoding ...')
+                latent_swap = core.encode_vae(
+                    vae=pipeline.final_refiner_vae,
+                    pixels=inpaint_pixel_fill)['samples']
+
             progressbar(13, 'VAE encoding ...')
-            inpaint_pixels = core.numpy_to_pytorch(inpaint_worker.current_task.image_ready)
-            initial_latent = core.encode_vae(vae=pipeline.final_vae, pixels=inpaint_pixels)
-            inpaint_latent = initial_latent['samples']
-            B, C, H, W = inpaint_latent.shape
-            inpaint_mask = core.numpy_to_pytorch(inpaint_worker.current_task.mask_ready[None])
-            inpaint_mask = torch.nn.functional.avg_pool2d(inpaint_mask, (8, 8))
-            inpaint_mask = torch.nn.functional.interpolate(inpaint_mask, (H, W), mode='bilinear')
-            inpaint_worker.current_task.load_latent(latent=inpaint_latent, mask=inpaint_mask)
+            latent_fill = core.encode_vae(
+                vae=pipeline.final_vae,
+                pixels=inpaint_pixel_fill)['samples']
 
-            progressbar(13, 'VAE inpaint encoding ...')
+            inpaint_worker.current_task.load_latent(latent_fill=latent_fill,
+                                                    latent_inpaint=latent_inpaint,
+                                                    latent_mask=latent_mask,
+                                                    latent_swap=latent_swap,
+                                                    inpaint_head_model_path=inpaint_head_model_path)
 
-            inpaint_mask = (inpaint_worker.current_task.mask_ready > 0).astype(np.float32)
-            inpaint_mask = torch.tensor(inpaint_mask).float()
-
-            vae_dict = core.encode_vae_inpaint(
-                mask=inpaint_mask, vae=pipeline.final_vae, pixels=inpaint_pixels)
-
-            inpaint_latent = vae_dict['samples']
-            inpaint_mask = vae_dict['noise_mask']
-            inpaint_worker.current_task.load_inpaint_guidance(latent=inpaint_latent, mask=inpaint_mask,
-                                                              model_path=inpaint_head_model_path)
-
-            B, C, H, W = inpaint_latent.shape
-            final_height, final_width = inpaint_worker.current_task.image_raw.shape[:2]
+            B, C, H, W = latent_fill.shape
             height, width = H * 8, W * 8
+            final_height, final_width = inpaint_worker.current_task.image.shape[:2]
+            initial_latent = {'samples': latent_fill}
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'cn' in goals:
@@ -471,12 +491,6 @@ def worker():
         print(f'Preparation time: {preparation_time:.2f} seconds')
 
         outputs.append(['preview', (13, 'Moving model to GPU ...', None)])
-        execution_start_time = time.perf_counter()
-        comfy.model_management.load_models_gpu([pipeline.final_unet])
-        moving_time = time.perf_counter() - execution_start_time
-        print(f'Moving model to GPU: {moving_time:.2f} seconds')
-
-        outputs.append(['preview', (13, 'Starting tasks ...', None)])
 
         def callback(step, x0, x, total_steps, y):
             done_steps = current_task_id * steps + step
@@ -516,7 +530,7 @@ def worker():
                     denoise=denoising_strength,
                     tiled=tiled,
                     cfg_scale=cfg_scale,
-                    refiner_swap_method=advanced_parameters.refiner_swap_method
+                    refiner_swap_method=refiner_swap_method
                 )
 
                 del task['c'], task['uc'], positive_cond, negative_cond  # Save memory
@@ -547,7 +561,7 @@ def worker():
                     log(x, d, single_line_number=3)
 
                 results += imgs
-            except comfy.model_management.InterruptProcessingException as e:
+            except fcbh.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')
                     continue

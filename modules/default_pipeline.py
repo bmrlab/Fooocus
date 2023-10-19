@@ -1,12 +1,17 @@
 import modules.core as core
 import os
 import torch
+import modules.patch
 import modules.path
-import comfy.model_management
+import fcbh.model_management
+import fcbh.latent_formats
+import modules.inpaint_worker
+import modules.sample_hijack as sample_hijack
 
-from comfy.model_base import SDXL, SDXLRefiner
+from fcbh.model_base import SDXL, SDXLRefiner
 from modules.expansion import FooocusExpansion
 from modules.sample_hijack import clip_separate
+from fcbh.k_diffusion.sampling import BrownianTreeNoiseSampler
 
 
 xl_base: core.StableDiffusionModel = None
@@ -63,8 +68,8 @@ def assert_model_integrity():
     if xl_refiner is not None:
         if xl_refiner.unet is None or xl_refiner.unet.model is None:
             error_message = 'You have selected an invalid refiner!'
-        elif not isinstance(xl_refiner.unet.model, SDXL) and not isinstance(xl_refiner.unet.model, SDXLRefiner):
-            error_message = 'SD1.5 or 2.1 as refiner is not supported!'
+        # elif not isinstance(xl_refiner.unet.model, SDXL) and not isinstance(xl_refiner.unet.model, SDXLRefiner):
+        #     error_message = 'SD1.5 or 2.1 as refiner is not supported!'
 
     if error_message is not None:
         raise NotImplementedError(error_message)
@@ -209,7 +214,7 @@ def prepare_text_encoder(async_call=True):
         # TODO: make sure that this is always called in an async way so that users cannot feel it.
         pass
     assert_model_integrity()
-    comfy.model_management.load_models_gpu([final_clip.patcher, final_expansion.patcher])
+    fcbh.model_management.load_models_gpu([final_clip.patcher, final_expansion.patcher])
     return
 
 
@@ -217,6 +222,12 @@ def prepare_text_encoder(async_call=True):
 @torch.inference_mode()
 def refresh_everything(refiner_model_name, base_model_name, loras):
     global final_unet, final_clip, final_vae, final_refiner_unet, final_refiner_vae, final_expansion
+
+    final_unet = None
+    final_clip = None
+    final_vae = None
+    final_refiner_unet = None
+    final_refiner_vae = None
 
     refresh_refiner_model(refiner_model_name)
     refresh_base_model(base_model_name)
@@ -227,12 +238,14 @@ def refresh_everything(refiner_model_name, base_model_name, loras):
     final_clip = xl_base_patched.clip
     final_vae = xl_base_patched.vae
 
-    if xl_refiner is None:
-        final_refiner_unet = None
-        final_refiner_vae = None
-    else:
+    final_unet.model.diffusion_model.in_inpaint = False
+
+    if xl_refiner is not None:
         final_refiner_unet = xl_refiner.unet
         final_refiner_vae = xl_refiner.vae
+
+        if final_refiner_unet is not None:
+            final_refiner_unet.model.diffusion_model.in_inpaint = False
 
     if final_expansion is None:
         final_expansion = FooocusExpansion()
@@ -257,28 +270,89 @@ refresh_everything(
 
 @torch.no_grad()
 @torch.inference_mode()
-def vae_parse(x, tiled=False):
+def vae_parse(x, tiled=False, use_interpose=True):
     if final_vae is None or final_refiner_vae is None:
         return x
 
-    print('VAE parsing ...')
-    x = core.decode_vae(vae=final_vae, latent_image=x, tiled=tiled)
-    x = core.encode_vae(vae=final_refiner_vae, pixels=x, tiled=tiled)
-    print('VAE parsed ...')
+    if use_interpose:
+        print('VAE interposing ...')
+        import fooocus_extras.vae_interpose
+        x = fooocus_extras.vae_interpose.parse(x)
+        print('VAE interposed ...')
+    else:
+        print('VAE parsing ...')
+        x = core.decode_vae(vae=final_vae, latent_image=x, tiled=tiled)
+        x = core.encode_vae(vae=final_refiner_vae, pixels=x, tiled=tiled)
+        print('VAE parsed ...')
 
     return x
 
 
 @torch.no_grad()
 @torch.inference_mode()
+def calculate_sigmas_all(sampler, model, scheduler, steps):
+    from fcbh.samplers import calculate_sigmas_scheduler
+
+    discard_penultimate_sigma = False
+    if sampler in ['dpm_2', 'dpm_2_ancestral']:
+        steps += 1
+        discard_penultimate_sigma = True
+
+    sigmas = calculate_sigmas_scheduler(model, scheduler, steps)
+
+    if discard_penultimate_sigma:
+        sigmas = torch.cat([sigmas[:-2], sigmas[-1:]])
+    return sigmas
+
+
+@torch.no_grad()
+@torch.inference_mode()
+def calculate_sigmas(sampler, model, scheduler, steps, denoise):
+    if denoise is None or denoise > 0.9999:
+        sigmas = calculate_sigmas_all(sampler, model, scheduler, steps)
+    else:
+        new_steps = int(steps / denoise)
+        sigmas = calculate_sigmas_all(sampler, model, scheduler, new_steps)
+        sigmas = sigmas[-(steps + 1):]
+    return sigmas
+
+
+@torch.no_grad()
+@torch.inference_mode()
 def process_diffusion(positive_cond, negative_cond, steps, switch, width, height, image_seed, callback, sampler_name, scheduler_name, latent=None, denoise=1.0, tiled=False, cfg_scale=7.0, refiner_swap_method='joint'):
-    assert refiner_swap_method in ['joint', 'separate', 'vae']
+    global final_unet, final_refiner_unet
+
+    assert refiner_swap_method in ['joint', 'separate', 'vae', 'upscale']
+
+    if final_refiner_unet is not None:
+        if isinstance(final_refiner_unet.model.latent_format, fcbh.latent_formats.SD15) \
+                and refiner_swap_method != 'upscale':
+            refiner_swap_method = 'vae'
+
+    if refiner_swap_method == 'vae' and denoise < 0.95:
+        # VAE swap only support full denoise
+        refiner_swap_method = 'joint'
+        # Disable refiner to avoid SD15 in joint swap
+        final_refiner_unet = None
+
     print(f'[Sampler] refiner_swap_method = {refiner_swap_method}')
 
     if latent is None:
         empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)
     else:
         empty_latent = latent
+
+    minmax_sigmas = calculate_sigmas(sampler=sampler_name, scheduler=scheduler_name, model=final_unet.model, steps=steps, denoise=denoise)
+    sigma_min, sigma_max = minmax_sigmas[minmax_sigmas > 0].min(), minmax_sigmas.max()
+    sigma_min = float(sigma_min.cpu().numpy())
+    sigma_max = float(sigma_max.cpu().numpy())
+    print(f'[Sampler] sigma_min = {sigma_min}, sigma_max = {sigma_max}')
+
+    modules.patch.globalBrownianTreeNoiseSampler = BrownianTreeNoiseSampler(
+        empty_latent['samples'].to(fcbh.model_management.get_torch_device()),
+        sigma_min, sigma_max, seed=image_seed, cpu=False)
+
+    decoded_latent = None
 
     if refiner_swap_method == 'joint':
         sampled_latent = core.ksampler(
@@ -299,8 +373,32 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             previewer_end=steps,
         )
         decoded_latent = core.decode_vae(vae=final_vae, latent_image=sampled_latent, tiled=tiled)
-        images = core.pytorch_to_numpy(decoded_latent)
-        return images
+
+    if refiner_swap_method == 'upscale':
+        target_model = final_refiner_unet
+        if target_model is None:
+            target_model = final_unet
+
+        sampled_latent = core.ksampler(
+            model=target_model,
+            positive=clip_separate(positive_cond, target_model=target_model.model, target_clip=final_clip),
+            negative=clip_separate(negative_cond, target_model=target_model.model, target_clip=final_clip),
+            latent=empty_latent,
+            steps=steps, start_step=0, last_step=steps, disable_noise=False, force_full_denoise=True,
+            seed=image_seed,
+            denoise=denoise,
+            callback_function=callback,
+            cfg=cfg_scale,
+            sampler_name=sampler_name,
+            scheduler=scheduler_name,
+            previewer_start=0,
+            previewer_end=steps,
+        )
+
+        target_model = final_refiner_vae
+        if target_model is None:
+            target_model = final_vae
+        decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     if refiner_swap_method == 'separate':
         sampled_latent = core.ksampler(
@@ -316,7 +414,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             sampler_name=sampler_name,
             scheduler=scheduler_name,
             previewer_start=0,
-            previewer_end=switch,
+            previewer_end=steps,
         )
         print('Refiner swapped by changing ksampler. Noise preserved.')
 
@@ -327,8 +425,8 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
         sampled_latent = core.ksampler(
             model=target_model,
-            positive=clip_separate(positive_cond, target_model=target_model.model),
-            negative=clip_separate(negative_cond, target_model=target_model.model),
+            positive=clip_separate(positive_cond, target_model=target_model.model, target_clip=final_clip),
+            negative=clip_separate(negative_cond, target_model=target_model.model, target_clip=final_clip),
             latent=sampled_latent,
             steps=steps, start_step=switch, last_step=steps, disable_noise=True, force_full_denoise=True,
             seed=image_seed,
@@ -345,11 +443,13 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         if target_model is None:
             target_model = final_vae
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
-        images = core.pytorch_to_numpy(decoded_latent)
-        return images
 
     if refiner_swap_method == 'vae':
-        sampled_latent = core.ksampler(
+        if modules.inpaint_worker.current_task is not None:
+            modules.inpaint_worker.current_task.unswap()
+
+        sample_hijack.history_record = []
+        core.ksampler(
             model=final_unet,
             positive=positive_cond,
             negative=negative_cond,
@@ -362,24 +462,53 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             sampler_name=sampler_name,
             scheduler=scheduler_name,
             previewer_start=0,
-            previewer_end=switch,
+            previewer_end=steps
         )
-        print('Refiner swapped by changing ksampler. Noise is not preserved.')
+        print('Fooocus VAE-based swap.')
 
         target_model = final_refiner_unet
         if target_model is None:
             target_model = final_unet
             print('Use base model to refine itself - this may because of developer mode.')
 
+        sigmas = calculate_sigmas(sampler=sampler_name,
+                                  scheduler=scheduler_name,
+                                  model=target_model.model,
+                                  steps=steps,
+                                  denoise=denoise)[switch:]
+        k1 = target_model.model.latent_format.scale_factor
+        k2 = final_unet.model.latent_format.scale_factor
+        k_sigmas = float(k1) / float(k2)
+        sigmas = sigmas * k_sigmas
+        len_sigmas = len(sigmas) - 1
+
+        last_step, last_clean_latent, last_noisy_latent = sample_hijack.history_record[-1]
+        last_clean_latent = final_unet.model.process_latent_out(last_clean_latent.cpu().to(torch.float32))
+        last_noisy_latent = final_unet.model.process_latent_out(last_noisy_latent.cpu().to(torch.float32))
+        last_noise = last_noisy_latent - last_clean_latent
+        last_noise = last_noise / last_noise.std()
+
+        noise_mean = torch.mean(last_noise, dim=1, keepdim=True).repeat(1, 4, 1, 1) / k_sigmas
+
+        refiner_noise = torch.normal(
+            mean=noise_mean,
+            std=torch.ones_like(noise_mean),
+            generator=torch.manual_seed(image_seed+1)  # Avoid artifacts
+        ).to(last_noise)
+
+        sampled_latent = {'samples': last_clean_latent}
         sampled_latent = vae_parse(sampled_latent)
+
+        if modules.inpaint_worker.current_task is not None:
+            modules.inpaint_worker.current_task.swap()
 
         sampled_latent = core.ksampler(
             model=target_model,
-            positive=clip_separate(positive_cond, target_model=target_model.model),
-            negative=clip_separate(negative_cond, target_model=target_model.model),
+            positive=clip_separate(positive_cond, target_model=target_model.model, target_clip=final_clip),
+            negative=clip_separate(negative_cond, target_model=target_model.model, target_clip=final_clip),
             latent=sampled_latent,
-            steps=steps, start_step=switch, last_step=steps, disable_noise=False, force_full_denoise=True,
-            seed=image_seed,
+            steps=len_sigmas, start_step=0, last_step=len_sigmas, disable_noise=False, force_full_denoise=True,
+            seed=image_seed+2,  # Avoid artifacts
             denoise=denoise,
             callback_function=callback,
             cfg=cfg_scale,
@@ -387,12 +516,15 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             scheduler=scheduler_name,
             previewer_start=switch,
             previewer_end=steps,
-            noise_multiplier=1.2,
+            sigmas=sigmas,
+            noise=refiner_noise
         )
 
         target_model = final_refiner_vae
         if target_model is None:
             target_model = final_vae
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
-        images = core.pytorch_to_numpy(decoded_latent)
-        return images
+
+    images = core.pytorch_to_numpy(decoded_latent)
+    sample_hijack.history_record = None
+    return images
