@@ -169,7 +169,7 @@ def worker():
             if (current_tab == 'inpaint' or (current_tab != 'uov' and advanced_parameters.mixing_image_prompt_and_inpaint))\
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
-                inpaint_mask = inpaint_mask_image[:, :, 0] if inpaint_mask_image else np.zeros_like(inpaint_image)[:, :, 0]
+                inpaint_mask = inpaint_mask_image[:, :, 0] if inpaint_mask_image is not None else np.zeros_like(inpaint_image)[:, :, 0]
                 
                 inpaint_image = HWC3(inpaint_image)
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
