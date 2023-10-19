@@ -354,7 +354,7 @@ with shared.gradio_root:
                 gr.Audio(interactive=False, value=notification_file, elem_id='audio_notification', visible=False)
                 break
 
-
+shared.gradio_root.queue()
 shared.gradio_root.launch(
     inbrowser=args_manager.args.auto_launch,
     server_name=args_manager.args.listen,
