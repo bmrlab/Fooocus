@@ -227,9 +227,6 @@ if __name__ == "__main__":
         sys.path.append(backend_path)
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("-p", "--port", default=7860, type=int)
-    args = parser.parse_args()
+    port = os.environ.get("PORT", "7860")
 
-    uvicorn.run("api:app", host=args.host, port=args.port, log_level="info")
+    uvicorn.run("api:app", host="0.0.0.0", port=int(port), log_level="critical")
