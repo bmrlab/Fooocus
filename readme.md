@@ -1,6 +1,10 @@
-# Fooocus
+<div align=center>
+<img src="https://github.com/lllyasviel/Fooocus/assets/19834515/9ad8ae87-1dc2-4acc-9a44-a5fa4ae2aad6" width=80%>
 
-<img src="https://github.com/lllyasviel/Fooocus/assets/19834515/f79c5981-cf80-4ee3-b06b-3fef3f8bfbc7" width=100%>
+*(Screenshot of Fooocus Realistic "run_realistic.bat" using default parameters without any manual tweaking)*
+</div>
+
+# Fooocus
 
 Fooocus is an image generating software (based on [Gradio](https://www.gradio.app/)).
 
@@ -102,7 +106,7 @@ Please open an issue if you use similar devices but still cannot achieve accepta
 | --- | --- |
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lllyasviel/Fooocus/blob/main/fooocus_colab.ipynb) | Fooocus Official
 
-In Colab, you can modify the last line to `!python entry_with_update.py --preset anime --share` or `!python entry_with_update.py --preset realistic --share` for Fooocus Anime/Realistic Edition.
+In Colab, you can modify the last line to `!python entry_with_update.py --share` or `!python entry_with_update.py --preset anime --share` or `!python entry_with_update.py --preset realistic --share` for Fooocus Default/Anime/Realistic Edition.
 
 Note that this Colab will disable refiner by default because Colab free's resource is relatively limited. 
 
@@ -294,3 +298,38 @@ Special thanks to [twri](https://github.com/twri) and [3Diva](https://github.com
 ## Update Log
 
 The log is [here](update_log.md).
+
+## Localization/Translation/I18N
+
+**We need your help!** Please help with translating Fooocus to international languages.
+
+You can put json files in the `language` folder to translate the user interface.
+
+For example, below is the content of `Fooocus/language/example.json`:
+
+```json
+{
+  "Generate": "生成",
+  "Input Image": "入力画像",
+  "Advanced": "고급",
+  "SAI 3D Model": "SAI 3D Modèle"
+}
+```
+
+If you add `--language example` arg, Fooocus will read `Fooocus/language/example.json` to translate the UI.
+
+For example, you can edit the ending line of Windows `run.bat` as
+
+    .\python_embeded\python.exe -s Fooocus\entry_with_update.py --language example
+
+Or `run_anime.bat` as
+
+    .\python_embeded\python.exe -s Fooocus\entry_with_update.py --language example --preset anime
+
+Or `run_realistic.bat` as
+
+    .\python_embeded\python.exe -s Fooocus\entry_with_update.py --language example --preset realistic
+
+For practical translation, you may create your own file like `Fooocus/language/jp.json` or `Fooocus/language/cn.json` and then use flag `--language jp` or `--language cn`. Apparently, these files do not exist now. **We need your help to create these files!**
+
+Note that if no `--language` is given and at the same time `Fooocus/language/default.json` exists, Fooocus will always load `Fooocus/language/default.json` for translation. By default, the file `Fooocus/language/default.json` does not exist.

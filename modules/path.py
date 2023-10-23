@@ -130,6 +130,16 @@ default_positive_prompt = get_config_item_or_set_default(
     validator=lambda x: isinstance(x, str),
     disable_empty_as_none=True
 )
+default_advanced_checkbox = get_config_item_or_set_default(
+    key='default_advanced_checkbox',
+    default_value=False,
+    validator=lambda x: isinstance(x, bool)
+)
+default_image_number = get_config_item_or_set_default(
+    key='default_image_number',
+    default_value=2,
+    validator=lambda x: isinstance(x, int) and x >= 1 and x <= 32
+)
 checkpoint_downloads = get_config_item_or_set_default(
     key='checkpoint_downloads',
     default_value={
@@ -189,6 +199,15 @@ def downloading_inpaint_models(v):
         model_dir=inpaint_models_path,
         file_name='fooocus_inpaint_head.pth'
     )
+    head_file = os.path.join(inpaint_models_path, 'fooocus_inpaint_head.pth')
+    patch_file = None
+
+    # load_file_from_url(
+    #     url='https://huggingface.co/lllyasviel/Annotators/resolve/main/ControlNetLama.pth',
+    #     model_dir=inpaint_models_path,
+    #     file_name='ControlNetLama.pth'
+    # )
+    # lama_file = os.path.join(inpaint_models_path, 'ControlNetLama.pth')
 
     if v == 'v1':
         load_file_from_url(
@@ -196,8 +215,7 @@ def downloading_inpaint_models(v):
             model_dir=inpaint_models_path,
             file_name='inpaint.fooocus.patch'
         )
-        return os.path.join(inpaint_models_path, 'fooocus_inpaint_head.pth'), os.path.join(inpaint_models_path,
-                                                                                           'inpaint.fooocus.patch')
+        patch_file = os.path.join(inpaint_models_path, 'inpaint.fooocus.patch')
 
     if v == 'v2.5':
         load_file_from_url(
@@ -205,8 +223,9 @@ def downloading_inpaint_models(v):
             model_dir=inpaint_models_path,
             file_name='inpaint_v25.fooocus.patch'
         )
-        return os.path.join(inpaint_models_path, 'fooocus_inpaint_head.pth'), os.path.join(inpaint_models_path,
-                                                                                           'inpaint_v25.fooocus.patch')
+        patch_file = os.path.join(inpaint_models_path, 'inpaint_v25.fooocus.patch')
+
+    return head_file, patch_file
 
 
 def downloading_controlnet_canny():

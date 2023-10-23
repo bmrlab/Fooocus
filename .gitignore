@@ -7,11 +7,13 @@ __pycache__
 *.patch
 *.backup
 *.corrupted
+/language/default.json
 lena.png
 lena_result.png
 lena_test.py
 user_path_config.txt
 build_chb.py
+experiment.py
 /modules/*.png
 /repositories
 /venv

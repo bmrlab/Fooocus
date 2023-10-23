@@ -1,3 +1,69 @@
+# 2.1.733
+
+* Increased allowed random seed range.
+
+# 2.1.728
+
+* Fixed some potential numerical problems since 2.1.723
+
+# 2.1.723
+
+* Improve Fooocus Anime a bit by using better SD1.5 refining formulation.
+
+# 2.1.722
+
+* Now it is possible to translate 100% all texts in the UI.
+
+# 2.1.721
+
+* Added language/en.json to make translation easier.
+
+# 2.1.720
+
+* Added Canvas Zoom to inpaint canvas
+* Fixed the problem that image will be cropped in UI when the uploaded image is too wide.
+
+# 2.1.719
+
+* I18N
+
+# 2.1.718
+
+* Corrected handling dash in wildcard names, more wildcards (extended-color).
+
+# 2.1.717
+
+* Corrected displaying multi-line prompts in Private Log.
+
+# 2.1.716
+
+* Added support for nested wildcards, more wildcards (flower, color_flower).
+
+# 2.1.714
+
+* Fixed resolution problems.
+
+# 2.1.712
+
+* Cleaned up Private Log (most users won't need information about raw prompts).
+
+# 2.1.711
+
+* Added more information about prompts in Private Log.
+* Made wildcards in negative prompt use different seed.
+
+# 2.1.710
+
+* Added information about wildcards usage in console log.
+
+# 2.1.709
+
+* Allowed changing default values of advanced checkbox and image number.
+
+# 2.1.707
+
+* Updated Gradio to v3.41.2.
+
 # 2.1.703
 
 * Fixed many previous problems related to inpaint.
