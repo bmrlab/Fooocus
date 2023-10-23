@@ -71,7 +71,6 @@ def worker():
         uov_input_image = args.pop()
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
-        inpaint_mask_image = args.pop()
 
         cn_tasks = {flags.cn_ip: [], flags.cn_canny: [], flags.cn_cpds: []}
         for _ in range(4):
@@ -162,8 +161,7 @@ def worker():
             if (current_tab == 'inpaint' or (current_tab != 'uov' and advanced_parameters.mixing_image_prompt_and_inpaint))\
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
-                inpaint_mask = inpaint_mask_image[:, :, 0] if inpaint_mask_image is not None else np.zeros_like(inpaint_image)[:, :, 0]
-                
+                inpaint_mask = inpaint_input_image['mask'][:, :, 0]
                 inpaint_image = HWC3(inpaint_image)
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):
