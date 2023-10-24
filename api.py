@@ -155,7 +155,7 @@ def handler(req: UniversalRequest):
             "image": load_base64(req.inpaint_image),
             "mask": load_base64(req.mask_image)
             if req.mask_image is not None
-            else np.zeros_like(req.inpaint_image),
+            else np.zeros_like(load_base64(req.inpaint_image)),
         }
         if req.inpaint_image is not None
         else None,
