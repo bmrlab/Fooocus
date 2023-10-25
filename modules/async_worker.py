@@ -174,7 +174,7 @@ def worker():
                     loras += [(inpaint_patch_model_path, 1.0)]
                     print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                     goals.append('inpaint')
-                    sampler_name = 'euler' if current_tab == 'product' else 'dpmpp_2m_sde_gpu'  # only support the patched dpmpp_2m_sde_gpu
+                    sampler_name = 'dpmpp_2m_sde_gpu'  # only support the patched dpmpp_2m_sde_gpu
             if current_tab == 'ip' or \
                     advanced_parameters.mixing_image_prompt_and_inpaint or \
                     advanced_parameters.mixing_image_prompt_and_vary_upscale:
@@ -423,9 +423,47 @@ def worker():
                     pixels=inpaint_pixel_fill)['samples']
 
             progressbar(13, 'VAE encoding ...')
-            latent_fill = core.encode_vae(
-                vae=pipeline.final_vae,
-                pixels=inpaint_pixel_fill)['samples']
+            if current_tab == "product":
+                print("[Muse] Run customized VAE encoding ...")
+
+                def muse_fill(image, mask):
+                    current_image = image.copy()
+                    raw_image = image.copy()
+                    area = np.where(mask < 127)
+                    store = raw_image[area]
+
+                    # add random noise
+                    for i in range(current_image.shape[0]):
+                        for j in range(current_image.shape[1]):
+                            if mask[i, j] == 255:
+                                current_image[i, j] = (
+                                    np.random.randint(0, 255),
+                                    np.random.randint(0, 255),
+                                    np.random.randint(0, 255),
+                                )
+
+                    # use only 1 filter, make sure background is not too blur
+                    for k, repeats in [
+                        # (512, 2), (256, 2), (128, 4), (64, 4), (33, 8), (15, 8), (5, 16), (3, 16)
+                        (5, 1)
+                    ]:
+                        for _ in range(repeats):
+                            current_image = inpaint_worker.box_blur(current_image, k)
+                            current_image[area] = store
+
+                    return current_image
+
+                pixel_to_fill = muse_fill(inpaint_worker.current_task.interested_image, inpaint_worker.current_task.interested_mask)
+
+                latent_fill = core.encode_vae(
+                    vae=pipeline.final_vae,
+                    pixels=pixel_to_fill
+                )['samples']
+                
+            else:
+                latent_fill = core.encode_vae(
+                    vae=pipeline.final_vae,
+                    pixels=inpaint_pixel_fill)['samples']
 
             inpaint_worker.current_task.load_latent(latent_fill=latent_fill,
                                                     latent_inpaint=latent_inpaint,
@@ -525,7 +563,7 @@ def worker():
                     callback=callback,
                     sampler_name=sampler_name,
                     scheduler_name=scheduler_name,
-                    latent=None if current_tab == "product" else initial_latent,
+                    latent=initial_latent,
                     denoise=denoising_strength,
                     tiled=tiled,
                     cfg_scale=cfg_scale,
