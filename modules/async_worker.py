@@ -457,7 +457,7 @@ def worker():
 
                 latent_fill = core.encode_vae(
                     vae=pipeline.final_vae,
-                    pixels=pixel_to_fill
+                    pixels=core.numpy_to_pytorch(pixel_to_fill)
                 )['samples']
                 
             else:
