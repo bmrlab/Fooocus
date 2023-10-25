@@ -343,6 +343,62 @@ def sample_dpmpp_fooocus_2m_sde_inpaint_seamless(model, x, sigmas, extra_args=No
 
     return x
 
+def to_d(x, sigma, denoised):
+    """Converts a denoiser output to a Karras ODE derivative."""
+    return (x - denoised) / utils.append_dims(sigma, x.ndim)
+
+
+@torch.no_grad()
+def sample_euler_patched(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1.):
+    """Implements Algorithm 2 (Euler steps) from Karras et al. (2022)."""
+    print('[Sampler] Muse customized sampler is activated.')
+
+    seed = extra_args.get("seed", None)
+    assert isinstance(seed, int)
+
+    energy_generator = torch.Generator(device='cpu')
+    energy_generator.manual_seed(seed + 1)  # avoid bad results by using different seeds.
+
+    def get_energy():
+        return torch.randn(x.size(), dtype=x.dtype, generator=energy_generator, device="cpu").to(x)
+
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+
+    latent_processor = model.inner_model.inner_model.inner_model.process_latent_in
+    inpaint_latent = None
+    inpaint_mask = None
+
+    if inpaint_worker.current_task is not None:
+        inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
+        inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
+
+    def blend_latent(a, b, w):
+        return a * w + b * (1 - w)
+
+    for i in trange(len(sigmas) - 1, disable=disable):
+        gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
+        sigma_hat = sigmas[i] * (gamma + 1)
+        if gamma > 0:
+            eps = torch.randn_like(x) * s_noise
+            x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
+        # denoised = model(x, sigma_hat * s_in, **extra_args)
+        if inpaint_latent is None:
+            denoised = model(x, sigma_hat * s_in, **extra_args)
+        else:
+            energy = get_energy() * sigma_hat + inpaint_latent
+            x_prime = blend_latent(x, energy, inpaint_mask)
+            denoised = model(x_prime, sigma_hat * s_in, **extra_args)
+            denoised = blend_latent(denoised, inpaint_latent, inpaint_mask)
+        d = to_d(x, sigma_hat, denoised)
+        if callback is not None:
+            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
+        dt = sigmas[i + 1] - sigma_hat
+        # Euler method
+        x = x + d * dt
+    return x
+
+
 
 def timed_adm(y, timesteps):
     if isinstance(y, torch.Tensor) and int(y.dim()) == 2 and int(y.shape[1]) == 5632:
@@ -524,6 +580,7 @@ def patch_all():
     fcbh.cldm.cldm.ControlNet.forward = patched_cldm_forward
     fcbh.ldm.modules.diffusionmodules.openaimodel.UNetModel.forward = patched_unet_forward
     fcbh.k_diffusion.sampling.sample_dpmpp_2m_sde_gpu = sample_dpmpp_fooocus_2m_sde_inpaint_seamless
+    fcbh.k_diffusion.sampling.sample_euler = sample_euler_patched
     fcbh.k_diffusion.external.DiscreteEpsDDPMDenoiser.forward = patched_discrete_eps_ddpm_denoiser_forward
     fcbh.model_base.SDXL.encode_adm = sdxl_encode_adm_patched
     fcbh.sd1_clip.ClipTokenWeightEncoder.encode_token_weights = encode_token_weights_patched_with_a1111_method

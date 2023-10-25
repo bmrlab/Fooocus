@@ -162,7 +162,7 @@ def worker():
                             switch = 24
                     progressbar(1, 'Downloading upscale models ...')
                     modules.path.downloading_upscale_model()
-            if (current_tab == 'inpaint' or (current_tab != 'uov' and advanced_parameters.mixing_image_prompt_and_inpaint))\
+            if (current_tab == 'inpaint' or current_tab == 'product' or (current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_inpaint))\
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -174,7 +174,7 @@ def worker():
                     loras += [(inpaint_patch_model_path, 1.0)]
                     print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                     goals.append('inpaint')
-                    sampler_name = 'dpmpp_2m_sde_gpu'  # only support the patched dpmpp_2m_sde_gpu
+                    sampler_name = 'euler' if current_tab == 'product' else 'dpmpp_2m_sde_gpu'  # only support the patched dpmpp_2m_sde_gpu
             if current_tab == 'ip' or \
                     advanced_parameters.mixing_image_prompt_and_inpaint or \
                     advanced_parameters.mixing_image_prompt_and_vary_upscale:
@@ -525,7 +525,7 @@ def worker():
                     callback=callback,
                     sampler_name=sampler_name,
                     scheduler_name=scheduler_name,
-                    latent=initial_latent,
+                    latent=None if current_tab == "product" else initial_latent,
                     denoise=denoising_strength,
                     tiled=tiled,
                     cfg_scale=cfg_scale,

@@ -43,8 +43,8 @@ class UniversalRequest(BaseModel):
     lora_models: List[dict] = []
     # advanced configuration
     controlnet_softness: float = 0.25  # 0 - 1
-    canny_low_threshold: int = 100  # 0 - 255
-    canny_high_threshold: int = 200  # 0 - 255
+    canny_low_threshold: int = 64  # 0 - 255
+    canny_high_threshold: int = 128  # 0 - 255 
     inpaint_engine: str = "v1"  # v1, v2.5
     refiner_swap_method: str = "joint"  # joint, separate, vae
     enable_free_u: bool = True
@@ -61,6 +61,8 @@ class UniversalRequest(BaseModel):
     mask_image: Optional[str] = None
     # control net
     control_images: List[dict] = []
+    # used to control pipeline
+    current_tab: Optional[str] = "inpaint"
 
 
 def load_base64(base64_string: str):
@@ -89,8 +91,8 @@ def handler(req: UniversalRequest):
         True,
         False,
         req.controlnet_softness,  # 0.25,
-        100,
-        200,
+        req.canny_low_threshold,
+        req.canny_high_threshold,
         req.inpaint_engine,  # "v1"
         req.refiner_swap_method,  # "joint",
         req.enable_free_u,  # True,
@@ -147,7 +149,7 @@ def handler(req: UniversalRequest):
         # 5 loras
         *lora_args_list,
         req.enable_input_image,  # bool in 'Input Image' Checkbox component
-        "",  # str in 'parameter_68' Textbox component
+        req.current_tab,  # str in 'parameter_68' Textbox component
         req.uov_mode,  # str in 'Upscale or Variation:' Radio component
         req.uov_image,
         req.outpaint_mode,
