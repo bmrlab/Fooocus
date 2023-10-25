@@ -1,3 +1,4 @@
+import contextlib
 import os
 import torch
 import time
@@ -458,23 +459,6 @@ def patched_unet_forward(self, x, timesteps=None, context=None, y=None, control=
         return self.out(h)
 
 
-def text_encoder_device_patched():
-    # Fooocus's style system uses text encoder much more times than fcbh so this makes things much faster.
-    return fcbh.model_management.get_torch_device()
-
-
-def patched_get_autocast_device(dev):
-    # https://github.com/lllyasviel/Fooocus/discussions/571
-    # https://github.com/lllyasviel/Fooocus/issues/620
-    result = ''
-    if hasattr(dev, 'type'):
-        result = str(dev.type)
-    if 'cuda' in result:
-        return 'cuda'
-    else:
-        return 'cpu'
-
-
 def patched_load_models_gpu(*args, **kwargs):
     execution_start_time = time.perf_counter()
     y = fcbh.model_management.load_models_gpu_origin(*args, **kwargs)
@@ -536,8 +520,6 @@ def patch_all():
         fcbh.model_management.load_models_gpu_origin = fcbh.model_management.load_models_gpu
 
     fcbh.model_management.load_models_gpu = patched_load_models_gpu
-    fcbh.model_management.get_autocast_device = patched_get_autocast_device
-    fcbh.model_management.text_encoder_device = text_encoder_device_patched
     fcbh.model_patcher.ModelPatcher.calculate_weight = calculate_weight_patched
     fcbh.cldm.cldm.ControlNet.forward = patched_cldm_forward
     fcbh.ldm.modules.diffusionmodules.openaimodel.UNetModel.forward = patched_unet_forward
