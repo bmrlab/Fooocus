@@ -12,6 +12,7 @@ import fcbh.ldm.modules.attention
 import fcbh.k_diffusion.sampling
 import fcbh.sd1_clip
 import modules.inpaint_worker as inpaint_worker
+import modules.product_worker as product_worker
 import fcbh.ldm.modules.diffusionmodules.openaimodel
 import fcbh.ldm.modules.diffusionmodules.model
 import fcbh.sd
@@ -282,14 +283,22 @@ def encode_token_weights_patched_with_a1111_method(self, token_weight_pairs):
 
 
 def patched_KSamplerX0Inpaint_forward(self, x, sigma, uncond, cond, cond_scale, denoise_mask, model_options={}, seed=None):
-    if inpaint_worker.current_task is not None:
+    if inpaint_worker.current_task is not None or product_worker.current_task is not None:
         if getattr(self, 'energy_generator', None) is None:
             # avoid bad results by using different seeds.
             self.energy_generator = torch.Generator(device='cpu').manual_seed((seed + 1) % constants.MAX_SEED)
 
         latent_processor = self.inner_model.inner_model.inner_model.process_latent_in
-        inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
-        inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
+
+        if inpaint_worker.current_task is not None:
+            inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
+            inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
+        elif product_worker.current_task is not None:
+            inpaint_latent = latent_processor(product_worker.current_task.latent).to(x)
+            inpaint_mask = product_worker.current_task.latent_mask.to(x)
+        else:
+            raise RuntimeError("unreachable code")
+        
         energy_sigma = sigma.reshape([sigma.shape[0]] + [1] * (len(x.shape) - 1))
         current_energy = torch.randn(x.size(), dtype=x.dtype, generator=self.energy_generator, device="cpu").to(x) * energy_sigma
         x = x * inpaint_mask + (inpaint_latent + current_energy) * (1.0 - inpaint_mask)

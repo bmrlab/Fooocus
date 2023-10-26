@@ -23,6 +23,7 @@ def worker():
     import fcbh.model_management
     import fooocus_extras.preprocessors as preprocessors
     import modules.inpaint_worker as inpaint_worker
+    import modules.product_worker as product_worker
     import modules.constants as constants
     import modules.advanced_parameters as advanced_parameters
     import fooocus_extras.ip_adapter as ip_adapter
@@ -72,6 +73,10 @@ def worker():
         uov_input_image = args.pop()
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
+
+        print("@@@async worker input")
+        print(current_tab)
+        print(inpaint_input_image)
 
         cn_tasks = {flags.cn_ip: [], flags.cn_canny: [], flags.cn_cpds: []}
         for _ in range(4):
@@ -162,7 +167,7 @@ def worker():
                             switch = 24
                     progressbar(1, 'Downloading upscale models ...')
                     modules.path.downloading_upscale_model()
-            if (current_tab == 'inpaint' or current_tab == 'product' or (current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_inpaint))\
+            if (current_tab == 'inpaint' or (current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_inpaint))\
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -186,6 +191,13 @@ def worker():
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.path.downloading_ip_adapters()
                 progressbar(1, 'Loading control models ...')
+
+            if current_tab == 'product':
+                goals.append('product')
+                inpaint_image = inpaint_input_image['image']
+                inpaint_mask = inpaint_input_image['mask'][:, :, 0]
+                inpaint_image = HWC3(inpaint_image)
+                inpaint_head_model_path, _ = modules.path.downloading_inpaint_models(advanced_parameters.inpaint_engine)
 
         # Load or unload CNs
         pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path])
@@ -426,47 +438,9 @@ def worker():
                     pixels=inpaint_pixel_fill)['samples']
 
             progressbar(13, 'VAE encoding ...')
-            if current_tab == "product":
-                print("[Muse] Run customized VAE encoding ...")
-
-                def muse_fill(image, mask):
-                    current_image = image.copy()
-                    raw_image = image.copy()
-                    area = np.where(mask < 127)
-                    store = raw_image[area]
-
-                    # add random noise
-                    for i in range(current_image.shape[0]):
-                        for j in range(current_image.shape[1]):
-                            if mask[i, j] == 255:
-                                current_image[i, j] = (
-                                    np.random.randint(0, 255),
-                                    np.random.randint(0, 255),
-                                    np.random.randint(0, 255),
-                                )
-
-                    # use only 1 filter, make sure background is not too blur
-                    for k, repeats in [
-                        # (512, 2), (256, 2), (128, 4), (64, 4), (33, 8), (15, 8), (5, 16), (3, 16)
-                        (5, 1)
-                    ]:
-                        for _ in range(repeats):
-                            current_image = inpaint_worker.box_blur(current_image, k)
-                            current_image[area] = store
-
-                    return current_image
-
-                pixel_to_fill = muse_fill(inpaint_worker.current_task.interested_image, inpaint_worker.current_task.interested_mask)
-
-                latent_fill = core.encode_vae(
-                    vae=pipeline.final_vae,
-                    pixels=core.numpy_to_pytorch(pixel_to_fill)
-                )['samples']
-                
-            else:
-                latent_fill = core.encode_vae(
-                    vae=pipeline.final_vae,
-                    pixels=inpaint_pixel_fill)['samples']
+            latent_fill = core.encode_vae(
+                vae=pipeline.final_vae,
+                pixels=inpaint_pixel_fill)['samples']
 
             inpaint_worker.current_task.load_latent(latent_fill=latent_fill,
                                                     latent_inpaint=latent_inpaint,
@@ -478,6 +452,48 @@ def worker():
             height, width = H * 8, W * 8
             final_height, final_width = inpaint_worker.current_task.image.shape[:2]
             initial_latent = {'samples': latent_fill}
+            print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
+
+        if 'product' in goals:
+            product_worker.current_task = inpaint_worker.InpaintWorker(
+                image=inpaint_image,
+                mask=inpaint_mask,
+                is_outpaint=False
+            )
+
+            progressbar(13, 'VAE Inpaint encoding ...')
+
+            inpaint_pixel_fill = core.numpy_to_pytorch(product_worker.current_task.interested_fill)
+            inpaint_pixel_image = core.numpy_to_pytorch(product_worker.current_task.interested_image)
+            inpaint_pixel_mask = core.numpy_to_pytorch(product_worker.current_task.interested_mask)
+
+            latent_inpaint, latent_mask = core.encode_vae_inpaint(
+                mask=inpaint_pixel_mask,
+                vae=pipeline.final_vae,
+                pixels=inpaint_pixel_image)
+            
+            progressbar(13, 'VAE encoding ...')
+            latent_fill = core.encode_vae(
+                vae=pipeline.final_vae,
+                pixels=inpaint_pixel_fill)['samples']
+
+            _, _, H, W = latent_fill.shape
+            height, width = H * 8, W * 8
+            final_height, final_width = product_worker.current_task.image.shape[:2]
+
+            empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)['samples']
+            latent_fill = latent_fill * (1 - latent_mask) + empty_latent * latent_mask
+
+            product_worker.current_task.load_latent(
+                latent_fill=latent_fill,
+                latent_inpaint=latent_fill,
+                latent_mask=latent_mask,
+                latent_swap=None,
+                inpaint_head_model_path=inpaint_head_model_path
+            )
+
+            initial_latent = {'samples': latent_fill}
+
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'cn' in goals:
@@ -577,6 +593,16 @@ def worker():
 
                 if inpaint_worker.current_task is not None:
                     imgs = [inpaint_worker.current_task.post_process(x) for x in imgs]
+
+                if product_worker.current_task is not None and inpaint_mask is not None and inpaint_image is not None:
+                    res = []
+                    for x in imgs:
+                        current_image = x.copy()
+                        area = np.where(inpaint_mask < 127)
+                        current_image[area] = inpaint_image[area]
+                        current_image = product_worker.current_task.post_process(current_image)
+                        res.append(current_image)
+                    imgs = res
 
                 for x in imgs:
                     d = [

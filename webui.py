@@ -183,6 +183,7 @@ with shared.gradio_root:
 
             uov_tab.select(lambda: ['uov', default_image], outputs=[current_tab, uov_input_image], queue=False, _js=down_js)
             inpaint_tab.select(lambda: 'inpaint', outputs=[current_tab], queue=False, _js=down_js)
+            product_tab.select(lambda: 'product', outputs=[current_tab], queue=False, _js=down_js)
             ip_tab.select(lambda: 'ip', outputs=[current_tab], queue=False, _js=down_js)
 
         with gr.Column(scale=1, visible=modules.path.default_advanced_checkbox) as advanced_column:
