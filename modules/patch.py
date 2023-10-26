@@ -23,9 +23,10 @@ import args_manager
 import modules.advanced_parameters as advanced_parameters
 import warnings
 import safetensors.torch
+import modules.constants as constants
 
 from fcbh.k_diffusion import utils
-from fcbh.k_diffusion.sampling import trange
+from fcbh.k_diffusion.sampling import BatchedBrownianTree
 from fcbh.ldm.modules.diffusionmodules.openaimodel import timestep_embedding, forward_timestep_embed
 
 
@@ -280,125 +281,58 @@ def encode_token_weights_patched_with_a1111_method(self, token_weight_pairs):
     return torch.cat(output, dim=-2).cpu(), first_pooled.cpu()
 
 
-globalBrownianTreeNoiseSampler = None
-
-
-@torch.no_grad()
-def sample_dpmpp_fooocus_2m_sde_inpaint_seamless(model, x, sigmas, extra_args=None, callback=None,
-                                                 disable=None, eta=1., s_noise=1., **kwargs):
-    print('[Sampler] Fooocus sampler is activated.')
-
-    seed = extra_args.get("seed", None)
-    assert isinstance(seed, int)
-
-    energy_generator = torch.Generator(device='cpu')
-    energy_generator.manual_seed(seed + 1)  # avoid bad results by using different seeds.
-
-    def get_energy():
-        return torch.randn(x.size(), dtype=x.dtype, generator=energy_generator, device="cpu").to(x)
-
-    extra_args = {} if extra_args is None else extra_args
-    s_in = x.new_ones([x.shape[0]])
-
-    old_denoised, h_last, h = None, None, None
-
-    latent_processor = model.inner_model.inner_model.inner_model.process_latent_in
-    inpaint_latent = None
-    inpaint_mask = None
-
+def patched_KSamplerX0Inpaint_forward(self, x, sigma, uncond, cond, cond_scale, denoise_mask, model_options={}, seed=None):
     if inpaint_worker.current_task is not None:
+        if getattr(self, 'energy_generator', None) is None:
+            # avoid bad results by using different seeds.
+            self.energy_generator = torch.Generator(device='cpu').manual_seed((seed + 1) % constants.MAX_SEED)
+
+        latent_processor = self.inner_model.inner_model.inner_model.process_latent_in
         inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
         inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
+        energy_sigma = sigma.reshape([sigma.shape[0]] + [1] * (len(x.shape) - 1))
+        current_energy = torch.randn(x.size(), dtype=x.dtype, generator=self.energy_generator, device="cpu").to(x) * energy_sigma
+        x = x * inpaint_mask + (inpaint_latent + current_energy) * (1.0 - inpaint_mask)
 
-    def blend_latent(a, b, w):
-        return a * w + b * (1 - w)
+        out = self.inner_model(x, sigma,
+                               cond=cond,
+                               uncond=uncond,
+                               cond_scale=cond_scale,
+                               model_options=model_options,
+                               seed=seed)
 
-    for i in trange(len(sigmas) - 1, disable=disable):
-        if inpaint_latent is None:
-            denoised = model(x, sigmas[i] * s_in, **extra_args)
-        else:
-            energy = get_energy() * sigmas[i] + inpaint_latent
-            x_prime = blend_latent(x, energy, inpaint_mask)
-            denoised = model(x_prime, sigmas[i] * s_in, **extra_args)
-            denoised = blend_latent(denoised, inpaint_latent, inpaint_mask)
-        if callback is not None:
-            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigmas[i], 'denoised': denoised})
-        if sigmas[i + 1] == 0:
-            x = denoised
-        else:
-            t, s = -sigmas[i].log(), -sigmas[i + 1].log()
-            h = s - t
-            eta_h = eta * h
-
-            x = sigmas[i + 1] / sigmas[i] * (-eta_h).exp() * x + (-h - eta_h).expm1().neg() * denoised
-            if old_denoised is not None:
-                r = h_last / h
-                x = x + 0.5 * (-h - eta_h).expm1().neg() * (1 / r) * (denoised - old_denoised)
-
-            x = x + globalBrownianTreeNoiseSampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (
-                        -2 * eta_h).expm1().neg().sqrt() * s_noise
-
-        old_denoised = denoised
-        h_last = h
-
-    return x
-
-def to_d(x, sigma, denoised):
-    """Converts a denoiser output to a Karras ODE derivative."""
-    return (x - denoised) / utils.append_dims(sigma, x.ndim)
+        out = out * inpaint_mask + inpaint_latent * (1.0 - inpaint_mask)
+    else:
+        out = self.inner_model(x, sigma,
+                               cond=cond,
+                               uncond=uncond,
+                               cond_scale=cond_scale,
+                               model_options=model_options,
+                               seed=seed)
+    return out
 
 
-@torch.no_grad()
-def sample_euler_patched(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1.):
-    """Implements Algorithm 2 (Euler steps) from Karras et al. (2022)."""
-    print('[Sampler] Muse customized sampler is activated.')
+class BrownianTreeNoiseSamplerPatched:
+    transform = None
+    tree = None
 
-    seed = extra_args.get("seed", None)
-    assert isinstance(seed, int)
+    @staticmethod
+    def global_init(x, sigma_min, sigma_max, seed=None, transform=lambda x: x, cpu=False):
+        t0, t1 = transform(torch.as_tensor(sigma_min)), transform(torch.as_tensor(sigma_max))
 
-    energy_generator = torch.Generator(device='cpu')
-    energy_generator.manual_seed(seed + 1)  # avoid bad results by using different seeds.
+        BrownianTreeNoiseSamplerPatched.transform = transform
+        BrownianTreeNoiseSamplerPatched.tree = BatchedBrownianTree(x, t0, t1, seed, cpu=cpu)
 
-    def get_energy():
-        return torch.randn(x.size(), dtype=x.dtype, generator=energy_generator, device="cpu").to(x)
+    def __init__(self, *args, **kwargs):
+        pass
 
-    extra_args = {} if extra_args is None else extra_args
-    s_in = x.new_ones([x.shape[0]])
+    @staticmethod
+    def __call__(sigma, sigma_next):
+        transform = BrownianTreeNoiseSamplerPatched.transform
+        tree = BrownianTreeNoiseSamplerPatched.tree
 
-    latent_processor = model.inner_model.inner_model.inner_model.process_latent_in
-    inpaint_latent = None
-    inpaint_mask = None
-
-    if inpaint_worker.current_task is not None:
-        inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
-        inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
-
-    def blend_latent(a, b, w):
-        return a * w + b * (1 - w)
-
-    for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
-        sigma_hat = sigmas[i] * (gamma + 1)
-        if gamma > 0:
-            eps = torch.randn_like(x) * s_noise
-            x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
-        # denoised = model(x, sigma_hat * s_in, **extra_args)
-        if inpaint_latent is None:
-            denoised = model(x, sigma_hat * s_in, **extra_args)
-        else:
-            energy = get_energy() * sigma_hat + inpaint_latent
-            x_prime = blend_latent(x, energy, inpaint_mask)
-            denoised = model(x_prime, sigma_hat * s_in, **extra_args)
-            denoised = blend_latent(denoised, inpaint_latent, inpaint_mask)
-        d = to_d(x, sigma_hat, denoised)
-        if callback is not None:
-            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
-        dt = sigmas[i + 1] - sigma_hat
-        # Euler method
-        x = x + d * dt
-    return x
-
-
+        t0, t1 = transform(torch.as_tensor(sigma)), transform(torch.as_tensor(sigma_next))
+        return tree(t0, t1) / (t1 - t0).abs().sqrt()
 
 def timed_adm(y, timesteps):
     if isinstance(y, torch.Tensor) and int(y.dim()) == 2 and int(y.shape[1]) == 5632:
@@ -579,11 +513,11 @@ def patch_all():
     fcbh.model_patcher.ModelPatcher.calculate_weight = calculate_weight_patched
     fcbh.cldm.cldm.ControlNet.forward = patched_cldm_forward
     fcbh.ldm.modules.diffusionmodules.openaimodel.UNetModel.forward = patched_unet_forward
-    fcbh.k_diffusion.sampling.sample_dpmpp_2m_sde_gpu = sample_dpmpp_fooocus_2m_sde_inpaint_seamless
-    fcbh.k_diffusion.sampling.sample_euler = sample_euler_patched
     fcbh.k_diffusion.external.DiscreteEpsDDPMDenoiser.forward = patched_discrete_eps_ddpm_denoiser_forward
     fcbh.model_base.SDXL.encode_adm = sdxl_encode_adm_patched
     fcbh.sd1_clip.ClipTokenWeightEncoder.encode_token_weights = encode_token_weights_patched_with_a1111_method
+    fcbh.samplers.KSamplerX0Inpaint.forward = patched_KSamplerX0Inpaint_forward
+    fcbh.k_diffusion.sampling.BrownianTreeNoiseSampler = BrownianTreeNoiseSamplerPatched
 
     warnings.filterwarnings(action='ignore', module='torchsde')
 
