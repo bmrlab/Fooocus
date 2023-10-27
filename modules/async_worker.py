@@ -74,10 +74,6 @@ def worker():
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
 
-        print("@@@async worker input")
-        print(current_tab)
-        print(inpaint_input_image)
-
         cn_tasks = {flags.cn_ip: [], flags.cn_canny: [], flags.cn_cpds: []}
         for _ in range(4):
             cn_img = args.pop()
@@ -118,6 +114,7 @@ def worker():
         denoising_strength = 1.0
         tiled = False
         inpaint_worker.current_task = None
+        product_worker.current_task = None
 
         width, height = aspect_ratios_selection.split('×')
         width, height = int(width), int(height)
