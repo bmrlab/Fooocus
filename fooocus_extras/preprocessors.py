@@ -64,6 +64,13 @@ def canny_pyramid(x):
     return norm255(result, low=1, high=99).clip(0, 255).astype(np.uint8)
 
 
+def canny_naive(x):
+    color_canny = centered_canny_color(x)
+    result = np.sum(color_canny, axis=2)
+
+    return norm255(result, low=1, high=99).clip(0, 255).astype(np.uint8)
+
+
 def cpds(x):
     # cv2.decolor is not "decolor", it is Cewu Lu's method
     # See http://www.cse.cuhk.edu.hk/leojia/projects/color2gray/index.html

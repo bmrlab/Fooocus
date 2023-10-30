@@ -243,11 +243,14 @@ def worker():
                 progressbar(1, 'Loading control models ...')
 
             if current_tab == 'product':
+                if len(cn_tasks[flags.cn_canny]) > 0:
+                    # replace default canny
+                    controlnet_canny_path = modules.path.download_controlnet_canny_diffusers()
+
                 goals.append('product')
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
                 inpaint_image = HWC3(inpaint_image)
-                inpaint_head_model_path, _ = modules.path.downloading_inpaint_models(advanced_parameters.inpaint_engine)
 
         # Load or unload CNs
         pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path])
@@ -511,7 +514,7 @@ def worker():
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'product' in goals:
-            product_worker.current_task = inpaint_worker.InpaintWorker(
+            product_worker.current_task = product_worker.ProductWorker(
                 image=inpaint_image,
                 mask=inpaint_mask,
                 is_outpaint=False
@@ -545,7 +548,6 @@ def worker():
                 latent_inpaint=latent_fill,
                 latent_mask=latent_mask,
                 latent_swap=None,
-                inpaint_head_model_path=inpaint_head_model_path
             )
 
             initial_latent = {'samples': latent_fill}
@@ -556,7 +558,10 @@ def worker():
             for task in cn_tasks[flags.cn_canny]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = resize_image(HWC3(cn_img), width=width, height=height)
-                cn_img = preprocessors.canny_pyramid(cn_img)
+                if 'product' in goals:
+                    cn_img = preprocessors.canny_naive(cn_img)
+                else:
+                    cn_img = preprocessors.canny_pyramid(cn_img)
                 cn_img = HWC3(cn_img)
                 task[0] = core.numpy_to_pytorch(cn_img)
                 if advanced_parameters.debugging_cn_preprocessor:
