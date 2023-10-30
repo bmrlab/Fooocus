@@ -179,12 +179,16 @@ def handler(req: UniversalRequest):
                 # gr.update(visible=True, value=image) if image is not None else gr.update(), \
                 # gr.update(visible=False)
                 pass
-            if flag == "results":
+            if flag == "finish":
                 # yield gr.update(visible=False), \
                 #     gr.update(visible=False), \
                 #     gr.update(visible=True, value=product)
                 # print(product)
                 finished = True
+
+                if len(product) >= 2:
+                    # ignore last one, which is image wall
+                    product = product[:-1]
 
                 for item in product:
                     im = Image.fromarray(item)
