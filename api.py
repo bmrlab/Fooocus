@@ -27,6 +27,7 @@ request_lock = threading.Lock()
 class UniversalRequest(BaseModel):
     model: str = "sd_xl_base_1.0_0.9vae.safetensors"
     refiner: str = "sd_xl_refiner_1.0_0.9vae.safetensors"
+    refiner_switch: float = 0.8
     prompt: str = ""
     negative_prompt: str = ""
     mode: str = "Speed"
@@ -44,7 +45,7 @@ class UniversalRequest(BaseModel):
     # advanced configuration
     controlnet_softness: float = 0.25  # 0 - 1
     canny_low_threshold: int = 64  # 0 - 255
-    canny_high_threshold: int = 128  # 0 - 255 
+    canny_high_threshold: int = 128  # 0 - 255
     inpaint_engine: str = "v1"  # v1, v2.5
     refiner_swap_method: str = "joint"  # joint, separate, vae
     enable_free_u: bool = True
@@ -146,6 +147,7 @@ def handler(req: UniversalRequest):
         req.guidance_scale,  # int | float (numeric value between 1.0 and 30.0) in 'Guidance Scale' Slider component
         req.model,  # str (Option from: ['sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Base Model' Dropdown component
         req.refiner,  # str (Option from: ['None', 'sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Refiner' Dropdown component
+        req.refiner_switch,
         # 5 loras
         *lora_args_list,
         req.enable_input_image,  # bool in 'Input Image' Checkbox component
