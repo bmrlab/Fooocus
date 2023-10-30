@@ -658,8 +658,6 @@ def worker():
                     res = []
                     for x in imgs:
                         current_image = x.copy()
-                        area = np.where(inpaint_mask < 127)
-                        current_image[area] = inpaint_image[area]
                         current_image = product_worker.current_task.post_process(current_image)
                         res.append(current_image)
                     imgs = res
