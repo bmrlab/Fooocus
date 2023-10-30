@@ -22,10 +22,15 @@ from modules.auth import auth_enabled, check_auth
 
 
 def generate_clicked(*args):
+    # outputs=[progress_html, progress_window, progress_gallery, gallery]
+
     execution_start_time = time.perf_counter()
+
+    worker.outputs = []
 
     yield gr.update(visible=True, value=modules.html.make_progress_html(1, 'Initializing ...')), \
         gr.update(visible=True, value=None), \
+        gr.update(visible=False, value=None), \
         gr.update(visible=False)
 
     worker.buffer.append(list(args))
@@ -36,12 +41,26 @@ def generate_clicked(*args):
         if len(worker.outputs) > 0:
             flag, product = worker.outputs.pop(0)
             if flag == 'preview':
+
+                # help bad internet connection by skipping duplicated preview
+                if len(worker.outputs) > 0:  # if we have the next item
+                    if worker.outputs[0][0] == 'preview':   # if the next item is also a preview
+                        # print('Skipped one preview for better internet connection.')
+                        continue
+
                 percentage, title, image = product
                 yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
                     gr.update(visible=True, value=image) if image is not None else gr.update(), \
+                    gr.update(), \
                     gr.update(visible=False)
             if flag == 'results':
+                yield gr.update(visible=True), \
+                    gr.update(visible=True), \
+                    gr.update(visible=True, value=product), \
+                    gr.update(visible=False)
+            if flag == 'finish':
                 yield gr.update(visible=False), \
+                    gr.update(visible=False), \
                     gr.update(visible=False), \
                     gr.update(visible=True, value=product)
                 finished = True
@@ -60,7 +79,9 @@ shared.gradio_root = gr.Blocks(
 with shared.gradio_root:
     with gr.Row():
         with gr.Column(scale=2):
-            progress_window = grh.Image(label='Preview', show_label=True, height=640, visible=False)
+            with gr.Row():
+                progress_window = grh.Image(label='Preview', show_label=True, height=640, visible=False)
+                progress_gallery = gr.Gallery(label='Finished Images', show_label=True, object_fit='contain', height=640, visible=False)
             progress_html = gr.HTML(value=modules.html.make_progress_html(32, 'Progress 32%'), visible=False, elem_id='progress-bar', elem_classes='progress-bar')
             gallery = gr.Gallery(label='Gallery', show_label=False, object_fit='contain', height=745, visible=True, elem_classes='resizable_area')
             with gr.Row(elem_classes='type_row'):
@@ -158,32 +179,18 @@ with shared.gradio_root:
             input_image_checkbox.change(lambda x: gr.update(visible=x), inputs=input_image_checkbox, outputs=image_input_panel, queue=False, _js=switch_js)
             ip_advanced.change(lambda: None, queue=False, _js=down_js)
 
-            current_tab = gr.Textbox(value='uov', visible=False)
+            current_tab = gr.State(value='uov')
+            default_image = gr.State(value=None)
 
-            default_image = None
+            lambda_img = lambda x: x['image'] if isinstance(x, dict) else x
+            uov_input_image.upload(lambda_img, inputs=uov_input_image, outputs=default_image, queue=False)
+            inpaint_input_image.upload(lambda_img, inputs=inpaint_input_image, outputs=default_image, queue=False)
 
-            def update_default_image(x):
-                global default_image
-                if isinstance(x, dict):
-                    default_image = x['image']
-                else:
-                    default_image = x
-                return
+            uov_input_image.clear(lambda: None, outputs=default_image, queue=False)
+            inpaint_input_image.clear(lambda: None, outputs=default_image, queue=False)
 
-            def clear_default_image():
-                global default_image
-                default_image = None
-                return
-
-            uov_input_image.upload(update_default_image, inputs=uov_input_image, queue=False)
-            # inpaint_input_image.upload(update_default_image, inputs=inpaint_input_image, queue=False)
-
-            uov_input_image.clear(clear_default_image, queue=False)
-            # inpaint_input_image.clear(clear_default_image, queue=False)
-
-            uov_tab.select(lambda: ['uov', default_image], outputs=[current_tab, uov_input_image], queue=False, _js=down_js)
-            inpaint_tab.select(lambda: 'inpaint', outputs=[current_tab], queue=False, _js=down_js)
-            product_tab.select(lambda: 'product', outputs=[current_tab], queue=False, _js=down_js)
+            uov_tab.select(lambda x: ['uov', x], inputs=default_image, outputs=[current_tab, uov_input_image], queue=False, _js=down_js)
+            inpaint_tab.select(lambda x: ['inpaint', x], inputs=default_image, outputs=[current_tab, inpaint_input_image], queue=False, _js=down_js)
             ip_tab.select(lambda: 'ip', outputs=[current_tab], queue=False, _js=down_js)
 
         with gr.Column(scale=1, visible=modules.path.default_advanced_checkbox) as advanced_column:
@@ -226,6 +233,18 @@ with shared.gradio_root:
                 with gr.Row():
                     base_model = gr.Dropdown(label='Base Model (SDXL only)', choices=modules.path.model_filenames, value=modules.path.default_base_model_name, show_label=True)
                     refiner_model = gr.Dropdown(label='Refiner (SDXL or SD 1.5)', choices=['None'] + modules.path.model_filenames, value=modules.path.default_refiner_model_name, show_label=True)
+
+                refiner_switch = gr.Slider(label='Refiner Switch At', minimum=0.1, maximum=1.0, step=0.0001,
+                                           info='Use 0.4 for SD1.5 realistic models; '
+                                                'or 0.667 for SD1.5 anime models; '
+                                                'or 0.8 for XL-refiners; '
+                                                'or any value for switching two SDXL models.',
+                                           value=modules.path.default_refiner_switch,
+                                           visible=modules.path.default_refiner_model_name != 'None')
+
+                refiner_model.change(lambda x: gr.update(visible=x != 'None'),
+                                     inputs=refiner_model, outputs=refiner_switch, show_progress=False, queue=False)
+
                 with gr.Accordion(label='LoRAs', open=True):
                     lora_ctrls = []
                     for i in range(5):
@@ -236,11 +255,10 @@ with shared.gradio_root:
                 with gr.Row():
                     model_refresh = gr.Button(label='Refresh', value='\U0001f504 Refresh All Files', variant='secondary', elem_classes='refresh_button')
             with gr.Tab(label='Advanced'):
-                sharpness = gr.Slider(label='Sampling Sharpness', minimum=0.0, maximum=30.0, step=0.001, value=2.0,
+                sharpness = gr.Slider(label='Sampling Sharpness', minimum=0.0, maximum=30.0, step=0.001, value=modules.path.default_sample_sharpness,
                                       info='Higher value means image and texture are sharper.')
                 guidance_scale = gr.Slider(label='Guidance Scale', minimum=1.0, maximum=30.0, step=0.01, value=modules.path.default_cfg_scale,
                                       info='Higher value means style is cleaner, vivider, and more artistic.')
-
                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/117" target="_blank">\U0001F4D4 Document</a>')
                 dev_mode = gr.Checkbox(label='Developer Debug Mode', value=False, container=False)
 
@@ -348,7 +366,7 @@ with shared.gradio_root:
             performance_selection, aspect_ratios_selection, image_number, image_seed, sharpness, guidance_scale
         ]
 
-        ctrls += [base_model, refiner_model] + lora_ctrls
+        ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
         ctrls += [outpaint_selections, inpaint_input_image]
@@ -357,7 +375,7 @@ with shared.gradio_root:
         generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False), []), outputs=[stop_button, skip_button, generate_button, gallery]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
             .then(advanced_parameters.set_all_advanced_parameters, inputs=adps) \
-            .then(fn=generate_clicked, inputs=ctrls, outputs=[progress_html, progress_window, gallery]) \
+            .then(fn=generate_clicked, inputs=ctrls, outputs=[progress_html, progress_window, progress_gallery, gallery]) \
             .then(lambda: (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)), outputs=[generate_button, stop_button, skip_button]) \
             .then(fn=None, _js='playNotification')
 
