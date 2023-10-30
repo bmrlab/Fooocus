@@ -151,7 +151,7 @@ def handler(req: UniversalRequest):
         req.enable_input_image,  # bool in 'Input Image' Checkbox component
         req.current_tab,  # str in 'parameter_68' Textbox component
         req.uov_mode,  # str in 'Upscale or Variation:' Radio component
-        req.uov_image,
+        load_base64(req.uov_image) if req.uov_image is not None else None,
         req.outpaint_mode,
         {
             "image": load_base64(req.inpaint_image),
