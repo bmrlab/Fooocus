@@ -83,12 +83,14 @@ def get_config_item_or_set_default(key, default_value, validator, disable_empty_
 
 default_base_model_name = get_config_item_or_set_default(
     key='default_model',
-    default_value='juggernautXL_version6Rundiffusion.safetensors',
+    # default_value='juggernautXL_version6Rundiffusion.safetensors',
+    default_value="sd_xl_base_1.0_0.9vae.safetensors",
     validator=lambda x: isinstance(x, str)
 )
 default_refiner_model_name = get_config_item_or_set_default(
     key='default_refiner',
-    default_value='None',
+    # default_value='None',
+    default_value="sd_xl_refiner_1.0_0.9vae.safetensors",
     validator=lambda x: isinstance(x, str)
 )
 default_refiner_switch = get_config_item_or_set_default(
