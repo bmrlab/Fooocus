@@ -547,9 +547,6 @@ def worker():
             height, width = H * 8, W * 8
             final_height, final_width = product_worker.current_task.image.shape[:2]
 
-            empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)['samples']
-            latent_fill = 0.5 * latent_fill * (1 - latent_mask) + empty_latent * latent_mask
-
             product_worker.current_task.load_latent(
                 latent_fill=latent_fill,
                 latent_inpaint=latent_inpaint,
