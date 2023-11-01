@@ -555,6 +555,7 @@ def worker():
                 latent_inpaint=latent_inpaint,
                 latent_mask=latent_mask,
                 latent_swap=None,
+                inpaint_head_model_path=inpaint_head_model_path,
             )
 
             initial_latent = {'samples': latent_fill}
