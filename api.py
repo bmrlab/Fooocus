@@ -240,6 +240,11 @@ async def generation(req: UniversalRequest):
                     )
                     ip_response = await run_in_threadpool(handler, ip_req)
 
+                    style_list = req.style if req.style is not None else []
+                    style_list.extend(["Fooocus Sharp"])
+                    style_set = set(style_list)
+                    req.style = list(style_set)
+
                     req.control_images.append(
                         {
                             "image": ip_response[0],
