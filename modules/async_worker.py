@@ -247,6 +247,11 @@ def worker():
                     # replace default canny
                     controlnet_canny_path = modules.path.download_controlnet_canny_diffusers()
 
+                progressbar(1, 'Downloading inpainter ...')
+                inpaint_head_model_path, inpaint_patch_model_path = modules.path.downloading_inpaint_models(advanced_parameters.inpaint_engine)
+                loras += [(inpaint_patch_model_path, 1.0)]
+                print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
+
                 goals.append('product')
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -520,6 +525,8 @@ def worker():
                 is_outpaint=False
             )
 
+            pipeline.final_unet.model.diffusion_model.in_inpaint = True
+
             progressbar(13, 'VAE Inpaint encoding ...')
 
             inpaint_pixel_fill = core.numpy_to_pytorch(product_worker.current_task.interested_fill)
@@ -541,11 +548,11 @@ def worker():
             final_height, final_width = product_worker.current_task.image.shape[:2]
 
             empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)['samples']
-            latent_fill = latent_fill * (1 - latent_mask) + empty_latent * latent_mask
+            latent_fill = 0.5 * latent_fill * (1 - latent_mask) + empty_latent * latent_mask
 
             product_worker.current_task.load_latent(
                 latent_fill=latent_fill,
-                latent_inpaint=latent_fill,
+                latent_inpaint=latent_inpaint,
                 latent_mask=latent_mask,
                 latent_swap=None,
             )
@@ -655,12 +662,7 @@ def worker():
                     imgs = [inpaint_worker.current_task.post_process(x) for x in imgs]
 
                 if product_worker.current_task is not None and inpaint_mask is not None and inpaint_image is not None:
-                    res = []
-                    for x in imgs:
-                        current_image = x.copy()
-                        current_image = product_worker.current_task.post_process(current_image)
-                        res.append(current_image)
-                    imgs = res
+                    imgs = [product_worker.current_task.post_process(x) for x in imgs]
 
                 for x in imgs:
                     d = [

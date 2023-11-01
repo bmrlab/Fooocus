@@ -6,6 +6,19 @@ from PIL import Image, ImageFilter
 from modules.util import resample_image, set_image_shape_ceil
 
 
+inpaint_head = None
+
+
+class InpaintHead(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.head = torch.nn.Parameter(torch.empty(size=(320, 5, 3, 3), device='cpu'))
+
+    def __call__(self, x):
+        x = torch.nn.functional.pad(x, (1, 1, 1, 1), "replicate")
+        return torch.nn.functional.conv2d(input=x, weight=self.head)
+
+
 current_task = None
 
 
@@ -162,25 +175,25 @@ class ProductWorker:
                     latent_swap=None,
                     inpaint_head_model_path=None):
 
-        # global inpaint_head
-        # assert inpaint_head_model_path is not None
+        global inpaint_head
+        assert inpaint_head_model_path is not None
 
         self.latent = latent_fill
         self.latent_mask = latent_mask
         self.latent_after_swap = latent_swap
 
-        # if inpaint_head is None:
-        #     inpaint_head = InpaintHead()
-        #     sd = torch.load(inpaint_head_model_path, map_location='cpu')
-        #     inpaint_head.load_state_dict(sd)
+        if inpaint_head is None:
+            inpaint_head = InpaintHead()
+            sd = torch.load(inpaint_head_model_path, map_location='cpu')
+            inpaint_head.load_state_dict(sd)
 
-        # feed = torch.cat([
-        #     latent_mask,
-        #     pipeline.xl_base_patched.unet.model.process_latent_in(latent_inpaint)
-        # ], dim=1)
+        feed = torch.cat([
+            latent_mask,
+            pipeline.xl_base_patched.unet.model.process_latent_in(latent_inpaint)
+        ], dim=1)
 
-        # inpaint_head.to(device=feed.device, dtype=feed.dtype)
-        # self.inpaint_head_feature = inpaint_head(feed)
+        inpaint_head.to(device=feed.device, dtype=feed.dtype)
+        self.inpaint_head_feature = inpaint_head(feed)
 
         return
 

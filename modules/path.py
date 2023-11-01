@@ -258,11 +258,11 @@ def downloading_controlnet_canny():
 
 def download_controlnet_canny_diffusers():
     load_file_from_url(
-        url='https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors',
+        url="https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/diffusers_xl_canny_small.safetensors",
         model_dir=controlnet_models_path,
-        file_name='controlnet-canny-sdxl-1.0.safetensors'
+        file_name='diffusers_xl_canny_small.safetensors'
     )
-    return os.path.join(controlnet_models_path, 'controlnet-canny-sdxl-1.0.safetensors')
+    return os.path.join(controlnet_models_path, 'diffusers_xl_canny_small.safetensors')
 
 def downloading_controlnet_cpds():
     load_file_from_url(

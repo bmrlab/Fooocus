@@ -1,4 +1,3 @@
-import argparse
 import base64
 import os
 import sys
@@ -27,7 +26,7 @@ request_lock = threading.Lock()
 class UniversalRequest(BaseModel):
     model: str = "sd_xl_base_1.0_0.9vae.safetensors"
     refiner: str = "sd_xl_refiner_1.0_0.9vae.safetensors"
-    refiner_switch: float = 0.8
+    refiner_switch: float = 0.667
     prompt: str = ""
     negative_prompt: str = ""
     mode: str = "Speed"
@@ -213,7 +212,46 @@ async def generation(req: UniversalRequest):
     if request_lock.acquire(blocking=False):
         try:
             active_request = req
-            response = await run_in_threadpool(handler, req)
+
+            if req.current_tab == "product":
+                activated_control_mode = [item["mode"] for item in req.control_images]
+                if "Image Prompt" not in activated_control_mode:
+                    ip_req = UniversalRequest(
+                        model=req.model,
+                        refiner=req.refiner,
+                        refiner_switch=req.refiner_switch,
+                        prompt=req.prompt,
+                        negative_prompt=req.negative_prompt,
+                        mode=req.mode,
+                        style=req.style,
+                        width=req.width,
+                        height=req.height,
+                        batch_size=1,
+                        seed=req.seed,
+                        sharpness=req.sharpness,
+                        sampler=req.sampler,
+                        scheduler=req.scheduler,
+                        guidance_scale=req.guidance_scale,
+                        enable_prompt_expansion=req.enable_prompt_expansion,
+                        lora_models=req.lora_models,
+                        enable_input_image=False,
+                        control_images=[],
+                        current_tab="",
+                    )
+                    ip_response = await run_in_threadpool(handler, ip_req)
+
+                    req.control_images.append(
+                        {
+                            "image": ip_response[0],
+                            "stop_at": 1,
+                            "weight": 0.6,
+                            "mode": "Image Prompt",
+                        }
+                    )
+
+                response = await run_in_threadpool(handler, req)
+            else:
+                response = await run_in_threadpool(handler, req)
         finally:
             active_request = None
             request_lock.release()
