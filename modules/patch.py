@@ -392,13 +392,8 @@ def patched_unet_forward(self, x, timesteps=None, context=None, y=None, control=
     self.current_step = 1.0 - timesteps.to(x) / 999.0
 
     inpaint_fix = None
-    if getattr(self, 'in_inpaint', False):
-        if inpaint_worker.current_task is not None:
-            inpaint_fix = inpaint_worker.current_task.inpaint_head_feature
-        elif product_worker.current_task is not None:
-            inpaint_fix = product_worker.current_task.inpaint_head_feature
-        else:
-            raise RuntimeError("unreachable code")
+    if getattr(self, 'in_inpaint', False) and inpaint_worker.current_task is not None:
+        inpaint_fix = inpaint_worker.current_task.inpaint_head_feature
 
     transformer_options["original_shape"] = list(x.shape)
     transformer_options["current_index"] = 0

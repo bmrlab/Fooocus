@@ -247,11 +247,6 @@ def worker():
                     # replace default canny
                     controlnet_canny_path = modules.path.download_controlnet_canny_diffusers()
 
-                progressbar(1, 'Downloading inpainter ...')
-                inpaint_head_model_path, inpaint_patch_model_path = modules.path.downloading_inpaint_models(advanced_parameters.inpaint_engine)
-                loras += [(inpaint_patch_model_path, 1.0)]
-                print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
-
                 goals.append('product')
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -547,12 +542,14 @@ def worker():
             height, width = H * 8, W * 8
             final_height, final_width = product_worker.current_task.image.shape[:2]
 
+            empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)['samples']
+            latent_fill = latent_fill * (1 - latent_mask) + empty_latent * latent_mask
+
             product_worker.current_task.load_latent(
                 latent_fill=latent_fill,
                 latent_inpaint=latent_inpaint,
                 latent_mask=latent_mask,
                 latent_swap=None,
-                inpaint_head_model_path=inpaint_head_model_path,
             )
 
             initial_latent = {'samples': latent_fill}
