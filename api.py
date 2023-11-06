@@ -3,14 +3,17 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import List, Optional
 
 import numpy as np
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from PIL import Image
 from pydantic import BaseModel
 
@@ -21,6 +24,47 @@ app = FastAPI()
 
 active_request = None
 request_lock = threading.Lock()
+
+
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+SECRET_KEY = os.environ.get("SECRET_KEY", "secret key")
+ALLOW_USERNAME = os.environ.get("USERNAME", "admin")
+ALLOW_PASSWORD = os.environ.get("PASSWORD", "admin")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return username
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 
 class UniversalRequest(BaseModel):
@@ -206,7 +250,7 @@ def handler(req: UniversalRequest):
 
 
 @app.post("/v1/generation")
-async def generation(req: UniversalRequest):
+async def generation(req: UniversalRequest, current_user=Depends(get_current_user)):
     global active_request
 
     if request_lock.acquire(blocking=False):
@@ -222,6 +266,27 @@ async def generation(req: UniversalRequest):
     return JSONResponse(
         status_code=503, content={"error": "Server is busy processing another request"}
     )
+
+
+@app.post("/v1/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    username = form_data.username
+    password = form_data.password
+
+    # 这里应该检查用户名和密码，示例中省略
+    if username != ALLOW_USERNAME or password != ALLOW_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": username}, expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 if __name__ == "__main__":
