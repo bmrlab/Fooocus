@@ -135,7 +135,7 @@ class ProductWorker:
         self.interested_image = set_image_shape_ceil(self.interested_image, 1024)
         H, W, C = self.interested_image.shape
 
-        self.interested_mask = resample_image(self.interested_mask, W, H)
+        self.interested_mask = up255(resample_image(self.interested_mask, W, H), t=127)
         self.interested_fill = fooocus_fill(self.interested_image, self.interested_mask)
 
         # soft pixels

@@ -243,10 +243,6 @@ def worker():
                 progressbar(1, 'Loading control models ...')
 
             if current_tab == 'product':
-                if len(cn_tasks[flags.cn_canny]) > 0:
-                    # replace default canny
-                    controlnet_canny_path = modules.path.download_controlnet_canny_diffusers()
-
                 goals.append('product')
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -520,8 +516,6 @@ def worker():
                 is_outpaint=False
             )
 
-            pipeline.final_unet.model.diffusion_model.in_inpaint = True
-
             progressbar(13, 'VAE Inpaint encoding ...')
 
             inpaint_pixel_fill = core.numpy_to_pytorch(product_worker.current_task.interested_fill)
@@ -560,10 +554,7 @@ def worker():
             for task in cn_tasks[flags.cn_canny]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = resize_image(HWC3(cn_img), width=width, height=height)
-                if 'product' in goals:
-                    cn_img = preprocessors.canny_naive(cn_img)
-                else:
-                    cn_img = preprocessors.canny_pyramid(cn_img)
+                cn_img = preprocessors.canny_pyramid(cn_img)
                 cn_img = HWC3(cn_img)
                 task[0] = core.numpy_to_pytorch(cn_img)
                 if advanced_parameters.debugging_cn_preprocessor:
