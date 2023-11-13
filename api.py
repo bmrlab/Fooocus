@@ -224,14 +224,10 @@ def handler(req: UniversalRequest):
                 # gr.update(visible=False)
                 pass
             if flag == "finish":
-                # yield gr.update(visible=False), \
-                #     gr.update(visible=False), \
-                #     gr.update(visible=True, value=product)
-                # print(product)
                 finished = True
-
-                if len(product) >= 2:
-                    # ignore last one, which is image wall
+                
+                if modules.advanced_parameters.generate_image_grid:
+                    # if enable image grid, ignore last image
                     product = product[:-1]
 
                 for item in product:
