@@ -125,6 +125,7 @@ def handler(req: UniversalRequest):
         7.0,
         req.sampler,  # "dpmpp_2m_sde_gpu",
         req.scheduler,  # "karras",
+        False, # grid
         -1,
         -1,
         -1,
