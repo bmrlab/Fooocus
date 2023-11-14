@@ -1,13 +1,26 @@
 import threading
-
+from PIL import Image
+import io
+import base64
 
 buffer = []
 outputs = []
 global_results = []
+global_progress_results = []
+
+
+def encode_img2base64(np_image):
+    image = Image.fromarray(np_image)
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = buffered.getvalue()
+    img_base64 = base64.b64encode(img_str)
+    img_base64_str = img_base64.decode('utf-8')
+    return img_base64_str
 
 
 def worker():
-    global buffer, outputs, global_results
+    global buffer, outputs, global_results, global_progress_results
 
     import traceback
     import math
@@ -30,6 +43,9 @@ def worker():
     import modules.advanced_parameters as advanced_parameters
     import fooocus_extras.ip_adapter as ip_adapter
     import fooocus_extras.face_crop
+    from PIL import Image
+    import io
+    import base64
 
     from modules.sdxl_styles import apply_style, apply_wildcards, fooocus_expansion
     from modules.private_logger import log
@@ -200,7 +216,8 @@ def worker():
         modules.patch.positive_adm_scale = advanced_parameters.adm_scaler_positive
         modules.patch.negative_adm_scale = advanced_parameters.adm_scaler_negative
         modules.patch.adm_scaler_end = advanced_parameters.adm_scaler_end
-        print(f'[Parameters] ADM Scale = {modules.patch.positive_adm_scale} : {modules.patch.negative_adm_scale} : {modules.patch.adm_scaler_end}')
+        print(
+            f'[Parameters] ADM Scale = {modules.patch.positive_adm_scale} : {modules.patch.negative_adm_scale} : {modules.patch.adm_scaler_end}')
 
         cfg_scale = float(guidance_scale)
         print(f'[Parameters] CFG = {cfg_scale}')
@@ -234,7 +251,8 @@ def worker():
         tasks = []
 
         if input_image_checkbox:
-            if (current_tab == 'uov' or (current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_vary_upscale)) \
+            if (current_tab == 'uov' or (
+                    current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_vary_upscale)) \
                     and uov_method != flags.disabled and uov_input_image is not None:
                 uov_input_image = HWC3(uov_input_image)
                 if 'vary' in uov_method:
@@ -257,7 +275,8 @@ def worker():
 
                     progressbar(1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
-            if (current_tab == 'inpaint' or (current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_inpaint))\
+            if (current_tab == 'inpaint' or (
+                    current_tab == 'ip' and advanced_parameters.mixing_image_prompt_and_inpaint)) \
                     and isinstance(inpaint_input_image, dict):
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
@@ -265,7 +284,8 @@ def worker():
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):
                     progressbar(1, 'Downloading inpainter ...')
-                    inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(advanced_parameters.inpaint_engine)
+                    inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(
+                        advanced_parameters.inpaint_engine)
                     base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
                     print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                     goals.append('inpaint')
@@ -281,7 +301,8 @@ def worker():
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters('face')
+                    clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters(
+                        'face')
                 progressbar(1, 'Loading control models ...')
 
             if current_tab == 'product':
@@ -574,7 +595,7 @@ def worker():
                 mask=inpaint_pixel_mask,
                 vae=pipeline.final_vae,
                 pixels=inpaint_pixel_image)
-            
+
             progressbar(13, 'VAE encoding ...')
             latent_fill = core.encode_vae(
                 vae=pipeline.final_vae,
@@ -686,6 +707,17 @@ def worker():
                 f'Step {step}/{total_steps} in the {current_task_id + 1}-th Sampling',
                 y)])
 
+            _item = {
+                "type": "preview",
+                "progress": (step + 1) / total_steps,
+                "image_base64": encode_img2base64(y)
+            }
+            if not global_progress_results or global_progress_results[-1]["type"] == "finish":
+                global_progress_results.append(_item)
+            else:
+                global_progress_results[-1] = _item
+            global_progress_results[-1]["index"] = len(global_progress_results) - 1
+
         for current_task_id, task in enumerate(tasks):
             execution_start_time = time.perf_counter()
 
@@ -755,6 +787,12 @@ def worker():
                     log(x, d, single_line_number=3)
 
                 yield_result(imgs, do_not_show_finished_images=len(tasks) == 1)
+
+                global_progress_results.pop()
+                global_progress_results.append(
+                    {"type": "finish", "index": len(global_progress_results), "progress": 1,
+                     "image_base64_list": encode_img2base64(imgs[0])}
+                )
             except fcbh.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')
@@ -780,6 +818,7 @@ def worker():
                 build_image_wall()
                 outputs.append(['finish', global_results])
                 global_results = []
+                global_progress_results = []
                 pipeline.prepare_text_encoder(async_call=True)
     pass
 

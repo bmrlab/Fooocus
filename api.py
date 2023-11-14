@@ -25,7 +25,6 @@ app = FastAPI()
 active_request = None
 request_lock = threading.Lock()
 
-
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 SECRET_KEY = os.environ.get("SECRET_KEY", "secret key")
@@ -125,7 +124,7 @@ def handler(req: UniversalRequest):
         7.0,
         req.sampler,  # "dpmpp_2m_sde_gpu",
         req.scheduler,  # "karras",
-        False, # grid
+        False,  # grid
         -1,
         -1,
         -1,
@@ -189,8 +188,10 @@ def handler(req: UniversalRequest):
         req.seed,  # int | float in 'Seed' Number component
         req.sharpness,  # int | float (numeric value between 0.0 and 30.0) in 'Sampling Sharpness' Slider component
         req.guidance_scale,  # int | float (numeric value between 1.0 and 30.0) in 'Guidance Scale' Slider component
-        req.model,  # str (Option from: ['sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Base Model' Dropdown component
-        req.refiner,  # str (Option from: ['None', 'sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Refiner' Dropdown component
+        req.model,
+        # str (Option from: ['sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Base Model' Dropdown component
+        req.refiner,
+        # str (Option from: ['None', 'sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Refiner' Dropdown component
         req.refiner_switch,
         # 5 loras
         *lora_args_list,
@@ -222,10 +223,12 @@ def handler(req: UniversalRequest):
                 # yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
                 # gr.update(visible=True, value=image) if image is not None else gr.update(), \
                 # gr.update(visible=False)
+                percentage, title, image = product
+
                 pass
             if flag == "finish":
                 finished = True
-                
+
                 if modules.advanced_parameters.generate_image_grid:
                     # if enable image grid, ignore last image
                     product = product[:-1]
@@ -284,6 +287,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/v1/progress")
+def progress():
+    data = worker.global_progress_results
+    return {"data": data}
 
 
 if __name__ == "__main__":
