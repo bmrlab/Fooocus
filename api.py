@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from PIL import Image
 from pydantic import BaseModel
@@ -21,6 +22,14 @@ import modules.advanced_parameters
 import modules.async_worker as worker
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许的源列表
+    allow_credentials=True,  # 允许跨源Cookie
+    allow_methods=["*"],  # 允许所有方法
+    allow_headers=["*"],  # 允许所有头部
+)
 
 active_request = None
 request_lock = threading.Lock()
