@@ -1,4 +1,5 @@
 import os
+import args_manager
 import modules.config
 
 from PIL import Image
@@ -16,6 +17,9 @@ def get_current_html_path():
 
 
 def log(img, dic, single_line_number=3):
+    if args_manager.args.disable_image_log:
+        return
+
     date_string, local_temp_filename, only_name = generate_temp_filename(folder=modules.config.path_outputs, extension='png')
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
     Image.fromarray(img).save(local_temp_filename)
@@ -40,7 +44,7 @@ def log(img, dic, single_line_number=3):
                 item += f"<p>{k}: <b>{v}</b>, "
             else:
                 item += f"{k}: <b>{v}</b></p>\n"
-    item += f"<p><img src=\"{only_name}\" width=512 onerror=\"document.getElementById('{div_name}').style.display = 'none';\"></img></p><hr></div>\n"
+    item += f"<p><img src=\"{only_name}\" width=auto height=100% loading=lazy style=\"height:auto;max-width:512px\" onerror=\"document.getElementById('{div_name}').style.display = 'none';\"></img></p><hr></div>\n"
     existing_log = item + existing_log
 
     with open(html_name, 'w', encoding='utf-8') as f:
