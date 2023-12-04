@@ -97,7 +97,11 @@ class UniversalRequest(BaseModel):
     controlnet_softness: float = 0.25  # 0 - 1
     canny_low_threshold: int = 64  # 0 - 255
     canny_high_threshold: int = 128  # 0 - 255
-    inpaint_engine: str = "v1"  # v1, v2.5
+    skipping_cn_preprocessor: bool = False
+    inpaint_disable_initial_latent: bool = False
+    inpaint_engine: str = "v1"  # v1, v2.5, v2.6
+    inpaint_strength: float = 1.0
+    inpaint_respective_field: float = 0.618
     refiner_swap_method: str = "joint"  # joint, separate, vae
     enable_free_u: bool = True
     free_u_b1: float = 1.01
@@ -111,6 +115,7 @@ class UniversalRequest(BaseModel):
     inpaint_image: Optional[str] = None
     outpaint_mode: List[str] = []
     mask_image: Optional[str] = None
+    inpaint_additional_prompt: bool = False
     # control net
     control_images: List[dict] = []
     # used to control pipeline
@@ -127,6 +132,7 @@ def load_base64(base64_string: str):
 
 def handler(req: UniversalRequest):
     modules.advanced_parameters.set_all_advanced_parameters(
+        False,
         1.5,
         0.8,
         0.3,
@@ -143,16 +149,21 @@ def handler(req: UniversalRequest):
         False,
         True,
         False,
+        req.skipping_cn_preprocessor,
         req.controlnet_softness,  # 0.25,
         req.canny_low_threshold,
         req.canny_high_threshold,
-        req.inpaint_engine,  # "v1"
         req.refiner_swap_method,  # "joint",
         req.enable_free_u,  # True,
         req.free_u_s1,  # 1.01,
         req.free_u_s2,  # 1.02,
         req.free_u_b1,  # 0.99,
         req.free_u_b2,  # 0.95,
+        False,
+        req.inpaint_disable_initial_latent,
+        req.inpaint_engine,
+        req.inpaint_strength,
+        req.inpaint_respective_field,
     )
 
     # preprocess lora args
@@ -217,24 +228,19 @@ def handler(req: UniversalRequest):
         }
         if req.inpaint_image is not None
         else None,
+        req.inpaint_additional_prompt,
         *control_net_args_list,
     )
-    worker.buffer.append(list(worker_args))
+
+    task = worker.AsyncTask(args=list(worker_args))
     finished = False
+    worker.async_tasks.append(task)
     results = []
 
     while not finished:
         time.sleep(0.01)
-        if len(worker.outputs) > 0:
-            flag, product = worker.outputs.pop(0)
-            if flag == "preview":
-                # percentage, title, image = product
-                # yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
-                # gr.update(visible=True, value=image) if image is not None else gr.update(), \
-                # gr.update(visible=False)
-                percentage, title, image = product
-
-                pass
+        if len(task.yields) > 0:
+            flag, product = task.yields.pop(0)
             if flag == "finish":
                 finished = True
 
@@ -259,7 +265,10 @@ def handler(req: UniversalRequest):
 
 
 @app.post("/v1/generation")
-async def generation(req: UniversalRequest, current_user=Depends(get_current_user)):
+async def generation(
+    req: UniversalRequest,
+    #  current_user=Depends(get_current_user)
+):
     global active_request
 
     if request_lock.acquire(blocking=False):
@@ -271,9 +280,9 @@ async def generation(req: UniversalRequest, current_user=Depends(get_current_use
         return response
 
     # If we can't acquire the lock, that means another
-    # request is being processed. Return 503 error.
+    # request is being processed. Return 429 error.
     return JSONResponse(
-        status_code=503, content={"error": "Server is busy processing another request"}
+        status_code=429, content={"error": "Server is busy processing another request"}
     )
 
 

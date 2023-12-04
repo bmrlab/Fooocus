@@ -3,8 +3,6 @@ from PIL import Image
 import io
 import base64
 
-buffer = []
-outputs = []
 global_results = []
 global_progress_results = []
 
@@ -29,7 +27,7 @@ class AsyncTask:
 async_tasks = []
 
 def worker():
-    global async_tasks, buffer, outputs, global_results, global_progress_results
+    global async_tasks, global_results, global_progress_results
 
     import traceback
     import math
@@ -337,10 +335,17 @@ def worker():
                 progressbar(async_task, 1, 'Loading control models ...')
 
             if current_tab == 'product':
-                goals.append('product')
                 inpaint_image = inpaint_input_image['image']
                 inpaint_mask = inpaint_input_image['mask'][:, :, 0]
                 inpaint_image = HWC3(inpaint_image)
+
+                if inpaint_additional_prompt is not None and inpaint_additional_prompt != '':
+                    if prompt == '':
+                        prompt = inpaint_additional_prompt
+                    else:
+                        prompt = inpaint_additional_prompt + '\n' + prompt
+
+                goals.append('product')
 
         # Load or unload CNs
         pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path])
@@ -648,7 +653,7 @@ def worker():
                 is_outpaint=False
             )
 
-            progressbar(13, 'VAE Inpaint encoding ...')
+            progressbar(async_task, 13, 'VAE Inpaint encoding ...')
 
             inpaint_pixel_fill = core.numpy_to_pytorch(product_worker.current_task.interested_fill)
             inpaint_pixel_image = core.numpy_to_pytorch(product_worker.current_task.interested_image)
@@ -659,7 +664,7 @@ def worker():
                 vae=pipeline.final_vae,
                 pixels=inpaint_pixel_image)
 
-            progressbar(13, 'VAE encoding ...')
+            progressbar(async_task, 13, 'VAE encoding ...')
             latent_fill = core.encode_vae(
                 vae=pipeline.final_vae,
                 pixels=inpaint_pixel_fill)['samples']
