@@ -115,7 +115,7 @@ class UniversalRequest(BaseModel):
     inpaint_image: Optional[str] = None
     outpaint_mode: List[str] = []
     mask_image: Optional[str] = None
-    inpaint_additional_prompt: bool = False
+    inpaint_additional_prompt: str = ''
     # control net
     control_images: List[dict] = []
     # used to control pipeline
