@@ -81,11 +81,15 @@ def refresh_refiner_model(name):
     if model_refiner.filename == filename:
         return
 
-    model_refiner = core.StableDiffusionModel()
-
+    # MODIFIED BY MUSE
+    # do not unload refiner if name is 'None'
+    # if use choose extreme speed, the refiner name is None
+    # but we do not want to unload it
     if name == 'None':
-        print(f'Refiner unloaded.')
+        # print(f'Refiner unloaded.')
         return
+
+    model_refiner = core.StableDiffusionModel()
 
     model_refiner = core.load_model(filename)
     print(f'Refiner model loaded: {model_refiner.filename}')
