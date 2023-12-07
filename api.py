@@ -78,7 +78,7 @@ class Token(BaseModel):
 class UniversalRequest(BaseModel):
     model: str = "sd_xl_base_1.0_0.9vae.safetensors"
     refiner: str = "sd_xl_refiner_1.0_0.9vae.safetensors"
-    refiner_switch: float = 0.667
+    refiner_switch: float = 0.8
     prompt: str = ""
     negative_prompt: str = ""
     mode: str = "Speed"
@@ -88,7 +88,7 @@ class UniversalRequest(BaseModel):
     batch_size: int = 1
     seed: Optional[int] = None
     sharpness: float = 2
-    sampler: str = "dpmpp_sde_gpu"
+    sampler: str = "dpmpp_2m_sde_gpu"
     scheduler: str = "karras"
     guidance_scale: float = 7
     enable_prompt_expansion: bool = False
@@ -115,7 +115,7 @@ class UniversalRequest(BaseModel):
     inpaint_image: Optional[str] = None
     outpaint_mode: List[str] = []
     mask_image: Optional[str] = None
-    inpaint_additional_prompt: str = ''
+    inpaint_additional_prompt: str = ""
     # control net
     control_images: List[dict] = []
     # used to control pipeline
@@ -171,13 +171,13 @@ def handler(req: UniversalRequest):
     if len(req.lora_models) < 5:
         # add basic offset lora
         lora_args_list.append("sd_xl_offset_example-lora_1.0.safetensors")
-        lora_args_list.append(0.5)
+        lora_args_list.append(0.1)
     for item in req.lora_models:
         lora_args_list.append(item["model"])
         lora_args_list.append(item["weight"])
     while len(lora_args_list) < 10:
         lora_args_list.append("None")
-        lora_args_list.append(0.5)
+        lora_args_list.append(1)
 
     # preprocess control net args
     control_net_args_list = []
@@ -265,10 +265,7 @@ def handler(req: UniversalRequest):
 
 
 @app.post("/v1/generation")
-async def generation(
-    req: UniversalRequest,
-    #  current_user=Depends(get_current_user)
-):
+async def generation(req: UniversalRequest, current_user=Depends(get_current_user)):
     global active_request
 
     if request_lock.acquire(blocking=False):
@@ -311,8 +308,11 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 def progress():
     data = worker.global_progress_results
     return {"data": data}
+
+
 def ini_fcbh_args():
     from args_manager import args
+
     return args
 
 

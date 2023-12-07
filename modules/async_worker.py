@@ -345,6 +345,25 @@ def worker():
                     else:
                         prompt = inpaint_additional_prompt + '\n' + prompt
 
+                if inpaint_parameterized:
+                    progressbar(async_task, 1, 'Downloading inpainter ...')
+                    modules.config.downloading_upscale_model()
+                    inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(
+                        advanced_parameters.inpaint_engine)
+                    base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
+                    print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
+                    if refiner_model_name == 'None':
+                        use_synthetic_refiner = True
+                        refiner_switch = 0.5
+                else:
+                    inpaint_head_model_path, inpaint_patch_model_path = None, None
+                    print('[Inpaint] Parameterized inpaint is disabled.')
+                if inpaint_additional_prompt != '':
+                    if prompt == '':
+                        prompt = inpaint_additional_prompt
+                    else:
+                        prompt = inpaint_additional_prompt + '\n' + prompt
+
                 goals.append('product')
 
         # Load or unload CNs
@@ -690,7 +709,7 @@ def worker():
                 latent_fill=latent_fill, latent_mask=latent_mask, latent_swap=latent_swap)
 
             if inpaint_parameterized:
-                pipeline.final_unet = inpaint_worker.current_task.patch(
+                pipeline.final_unet = product_worker.current_task.patch(
                     inpaint_head_model_path=inpaint_head_model_path,
                     inpaint_latent=latent_inpaint,
                     inpaint_latent_mask=latent_mask,
@@ -702,7 +721,7 @@ def worker():
 
             B, C, H, W = latent_fill.shape
             height, width = H * 8, W * 8
-            final_height, final_width = inpaint_worker.current_task.image.shape[:2]
+            final_height, final_width = product_worker.current_task.image.shape[:2]
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
             
 
