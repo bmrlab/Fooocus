@@ -311,6 +311,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 def progress():
     data = worker.global_progress_results
     return {"data": data}
+def ini_fcbh_args():
+    from args_manager import args
+    return args
 
 
 if __name__ == "__main__":
@@ -321,6 +324,9 @@ if __name__ == "__main__":
     if backend_path not in sys.path:
         sys.path.append(backend_path)
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+    # enable this to receive cli args
+    args = ini_fcbh_args()
 
     port = os.environ.get("PORT", "7860")
 
