@@ -6,6 +6,7 @@ import modules.config
 import fcbh.model_management
 import fcbh.latent_formats
 import modules.inpaint_worker
+import modules.product_worker
 import fooocus_extras.vae_interpose as vae_interpose
 
 from fcbh.model_base import SDXL, SDXLRefiner
@@ -430,6 +431,9 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
         if modules.inpaint_worker.current_task is not None:
             modules.inpaint_worker.current_task.unswap()
+        
+        if modules.product_worker.current_task is not None:
+            modules.product_worker.current_task.unswap()
 
         sampled_latent = core.ksampler(
             model=target_unet,
@@ -467,6 +471,9 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
         if modules.inpaint_worker.current_task is not None:
             modules.inpaint_worker.current_task.swap()
+
+        if modules.product_worker.current_task is not None:
+            modules.product_worker.current_task.swap()
 
         sampled_latent = core.ksampler(
             model=target_model,
