@@ -8,6 +8,8 @@ import einops
 import torch
 import numpy as np
 
+import copy
+
 import fcbh.model_management
 import fcbh.model_detection
 import fcbh.model_patcher
@@ -50,6 +52,11 @@ class StableDiffusionModel:
         self.unet_with_lora = unet
         self.clip_with_lora = clip
         self.visited_loras = ''
+
+        # MODIFIED BY MUSE
+        # infinitely cache lora weights
+        # this will not consume too much RAM
+        self.loaded_loras = {}
 
         self.lora_key_map_unet = {}
         self.lora_key_map_clip = {}
@@ -98,7 +105,11 @@ class StableDiffusionModel:
         self.clip_with_lora = self.clip.clone() if self.clip is not None else None
 
         for lora_filename, weight in loras_to_load:
-            lora_unmatch = fcbh.utils.load_torch_file(lora_filename, safe_load=False)
+            if lora_filename not in self.loaded_loras:
+                self.loaded_loras[lora_filename] = fcbh.utils.load_torch_file(lora_filename, safe_load=False)
+
+            # TODO match_lora will not modify lora_unmatch, so we don't need to deepcopy
+            lora_unmatch = self.loaded_loras[lora_filename] # copy.deepcopy(self.loaded_loras[lora_filename])
             lora_unet, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_unet)
             lora_clip, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_clip)
 

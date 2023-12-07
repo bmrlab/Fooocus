@@ -80,7 +80,7 @@ def refresh_refiner_model(name):
 
     if model_refiner.filename == filename:
         return
-
+    
     # MODIFIED BY MUSE
     # do not unload refiner if name is 'None'
     # if use choose extreme speed, the refiner name is None
