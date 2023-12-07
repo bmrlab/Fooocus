@@ -107,6 +107,8 @@ class StableDiffusionModel:
         for lora_filename, weight in loras_to_load:
             if lora_filename not in self.loaded_loras:
                 self.loaded_loras[lora_filename] = fcbh.utils.load_torch_file(lora_filename, safe_load=False)
+            else:
+                print(f'Lora [{lora_filename}] already loaded. Using cached version.')
 
             # TODO match_lora will not modify lora_unmatch, so we don't need to deepcopy
             lora_unmatch = self.loaded_loras[lora_filename] # copy.deepcopy(self.loaded_loras[lora_filename])
