@@ -345,25 +345,6 @@ def worker():
                     else:
                         prompt = inpaint_additional_prompt + '\n' + prompt
 
-                if inpaint_parameterized:
-                    progressbar(async_task, 1, 'Downloading inpainter ...')
-                    modules.config.downloading_upscale_model()
-                    inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(
-                        advanced_parameters.inpaint_engine)
-                    base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
-                    print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
-                    if refiner_model_name == 'None':
-                        use_synthetic_refiner = True
-                        refiner_switch = 0.5
-                else:
-                    inpaint_head_model_path, inpaint_patch_model_path = None, None
-                    print('[Inpaint] Parameterized inpaint is disabled.')
-                if inpaint_additional_prompt != '':
-                    if prompt == '':
-                        prompt = inpaint_additional_prompt
-                    else:
-                        prompt = inpaint_additional_prompt + '\n' + prompt
-
                 goals.append('product')
 
         # Load or unload CNs
@@ -666,13 +647,10 @@ def worker():
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'product' in goals:
-            denoising_strength = advanced_parameters.inpaint_strength
-            
             product_worker.current_task = product_worker.ProductWorker(
                 image=inpaint_image,
                 mask=inpaint_mask,
-                use_fill=denoising_strength > 0.99,
-                k=advanced_parameters.inpaint_respective_field
+                is_outpaint=False,
             )
 
             progressbar(async_task, 13, 'VAE Inpaint encoding ...')
@@ -681,47 +659,32 @@ def worker():
             inpaint_pixel_image = core.numpy_to_pytorch(product_worker.current_task.interested_image)
             inpaint_pixel_mask = core.numpy_to_pytorch(product_worker.current_task.interested_mask)
 
-            candidate_vae, candidate_vae_swap = pipeline.get_candidate_vae(
-                steps=steps,
-                switch=switch,
-                denoise=denoising_strength,
-                refiner_swap_method=refiner_swap_method
-            )
-
             latent_inpaint, latent_mask = core.encode_vae_inpaint(
                 mask=inpaint_pixel_mask,
-                vae=candidate_vae,
+                vae=pipeline.final_vae,
                 pixels=inpaint_pixel_image)
-
-            latent_swap = None
-            if candidate_vae_swap is not None:
-                progressbar(async_task, 13, 'VAE SD15 encoding ...')
-                latent_swap = core.encode_vae(
-                    vae=candidate_vae_swap,
-                    pixels=inpaint_pixel_fill)['samples']
 
             progressbar(async_task, 13, 'VAE encoding ...')
             latent_fill = core.encode_vae(
-                vae=candidate_vae,
+                vae=pipeline.final_vae,
                 pixels=inpaint_pixel_fill)['samples']
 
-            product_worker.current_task.load_latent(
-                latent_fill=latent_fill, latent_mask=latent_mask, latent_swap=latent_swap)
-
-            if inpaint_parameterized:
-                pipeline.final_unet = product_worker.current_task.patch(
-                    inpaint_head_model_path=inpaint_head_model_path,
-                    inpaint_latent=latent_inpaint,
-                    inpaint_latent_mask=latent_mask,
-                    model=pipeline.final_unet
-                )
-
-            if not advanced_parameters.inpaint_disable_initial_latent:
-                initial_latent = {'samples': latent_fill}
-
-            B, C, H, W = latent_fill.shape
+            _, _, H, W = latent_fill.shape
             height, width = H * 8, W * 8
             final_height, final_width = product_worker.current_task.image.shape[:2]
+
+            empty_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)['samples']
+            latent_fill = latent_fill * (1 - latent_mask) + empty_latent * latent_mask
+
+            product_worker.current_task.load_latent(
+                latent_fill=latent_fill,
+                latent_inpaint=latent_inpaint,
+                latent_mask=latent_mask,
+                latent_swap=None,
+            )
+
+            initial_latent = {'samples': latent_fill}
+
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
             
 

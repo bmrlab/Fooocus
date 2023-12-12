@@ -1,23 +1,7 @@
-import torch
 import numpy as np
-
 from PIL import Image, ImageFilter
-from modules.util import resample_image, set_image_shape_ceil, get_image_shape_ceil
-from modules.upscaler import perform_upscale
 
-
-inpaint_head_model = None
-
-
-class InpaintHead(torch.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.head = torch.nn.Parameter(torch.empty(size=(320, 5, 3, 3), device='cpu'))
-
-    def __call__(self, x):
-        x = torch.nn.functional.pad(x, (1, 1, 1, 1), "replicate")
-        return torch.nn.functional.conv2d(input=x, weight=self.head)
-
+from modules.util import resample_image, set_image_shape_ceil
 
 current_task = None
 
@@ -77,32 +61,29 @@ def regulate_abcd(x, a, b, c, d):
 
 def compute_initial_abcd(x):
     indices = np.where(x)
-    a = np.min(indices[0])
-    b = np.max(indices[0])
-    c = np.min(indices[1])
-    d = np.max(indices[1])
+    a = np.min(indices[0]) - 64
+    b = np.max(indices[0]) + 65
+    c = np.min(indices[1]) - 64
+    d = np.max(indices[1]) + 65
     abp = (b + a) // 2
     abm = (b - a) // 2
     cdp = (d + c) // 2
     cdm = (d - c) // 2
-    l = int(max(abm, cdm) * 1.15)
+    l = max(abm, cdm)
     a = abp - l
-    b = abp + l + 1
+    b = abp + l
     c = cdp - l
-    d = cdp + l + 1
+    d = cdp + l
     a, b, c, d = regulate_abcd(x, a, b, c, d)
     return a, b, c, d
 
 
-def solve_abcd(x, a, b, c, d, k):
-    k = float(k)
-    assert 0.0 <= k <= 1.0
-
+def solve_abcd(x, a, b, c, d, outpaint):
     H, W = x.shape[:2]
-    if k == 1.0:
+    if outpaint:
         return 0, H, 0, W
     while True:
-        if b - a >= H * k and d - c >= W * k:
+        if b - a > H * 0.618 and d - c > W * 0.618:
             break
 
         add_h = (b - a) < (d - c)
@@ -129,7 +110,7 @@ def solve_abcd(x, a, b, c, d, k):
 def fooocus_fill(image, mask):
     current_image = image.copy()
     raw_image = image.copy()
-    area = np.where(mask < 127)
+    area = np.where(mask < 10)
     store = raw_image[area]
 
     for k, repeats in [(512, 2), (256, 2), (128, 4), (64, 4), (33, 8), (15, 8), (5, 16), (3, 16)]:
@@ -141,30 +122,21 @@ def fooocus_fill(image, mask):
 
 
 class ProductWorker:
-    def __init__(self, image, mask, use_fill=True, k=0.618):
+    def __init__(self, image, mask, is_outpaint):
         a, b, c, d = compute_initial_abcd(mask > 0)
-        a, b, c, d = solve_abcd(mask, a, b, c, d, k=k)
+        a, b, c, d = solve_abcd(mask, a, b, c, d, outpaint=is_outpaint)
 
         # interested area
         self.interested_area = (a, b, c, d)
         self.interested_mask = mask[a:b, c:d]
         self.interested_image = image[a:b, c:d]
 
-        # super resolution
-        if get_image_shape_ceil(self.interested_image) < 1024:
-            self.interested_image = perform_upscale(self.interested_image)
-
         # resize to make images ready for diffusion
         self.interested_image = set_image_shape_ceil(self.interested_image, 1024)
-        self.interested_fill = self.interested_image.copy()
         H, W, C = self.interested_image.shape
 
-        # process mask
         self.interested_mask = up255(resample_image(self.interested_mask, W, H), t=127)
-
-        # compute filling
-        if use_fill:
-            self.interested_fill = fooocus_fill(self.interested_image, self.interested_mask)
+        self.interested_fill = fooocus_fill(self.interested_image, self.interested_mask)
 
         # soft pixels
         self.mask = morphological_open(mask)
@@ -178,36 +150,17 @@ class ProductWorker:
         self.inpaint_head_feature = None
         return
 
-    def load_latent(self, latent_fill, latent_mask, latent_swap=None):
+    def load_latent(self,
+                    latent_fill,
+                    latent_inpaint,
+                    latent_mask,
+                    latent_swap=None,):
+
         self.latent = latent_fill
         self.latent_mask = latent_mask
         self.latent_after_swap = latent_swap
+
         return
-
-    def patch(self, inpaint_head_model_path, inpaint_latent, inpaint_latent_mask, model):
-        global inpaint_head_model
-
-        if inpaint_head_model is None:
-            inpaint_head_model = InpaintHead()
-            sd = torch.load(inpaint_head_model_path, map_location='cpu')
-            inpaint_head_model.load_state_dict(sd)
-
-        feed = torch.cat([
-            inpaint_latent_mask,
-            model.model.process_latent_in(inpaint_latent)
-        ], dim=1)
-
-        inpaint_head_model.to(device=feed.device, dtype=feed.dtype)
-        inpaint_head_feature = inpaint_head_model(feed)
-
-        def input_block_patch(h, transformer_options):
-            if transformer_options["block"][1] == 0:
-                h = h + inpaint_head_feature.to(h)
-            return h
-
-        m = model.clone()
-        m.set_model_input_block_patch(input_block_patch)
-        return m
 
     def swap(self):
         if self.swapped:
@@ -253,4 +206,4 @@ class ProductWorker:
         return result
 
     def visualize_mask_processing(self):
-        return [self.interested_fill, self.interested_mask, self.interested_image]
+        return [self.interested_fill, self.interested_mask, self.image, self.mask]
