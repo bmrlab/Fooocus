@@ -103,17 +103,14 @@ class StableDiffusionModel:
         self.clip_with_lora = self.clip.clone() if self.clip is not None else None
 
         for lora_filename, weight in loras_to_load:
-<<<<<<< HEAD
             if lora_filename not in self.loaded_loras:
-                self.loaded_loras[lora_filename] = fcbh.utils.load_torch_file(lora_filename, safe_load=False)
+                self.loaded_loras[lora_filename] = ldm_patched.modules.utils.load_torch_file(lora_filename, safe_load=False)
             else:
                 print(f'Lora [{lora_filename}] already loaded. Using cached version.')
 
             # TODO match_lora will not modify lora_unmatch, so we don't need to deepcopy
             lora_unmatch = self.loaded_loras[lora_filename] # copy.deepcopy(self.loaded_loras[lora_filename])
-=======
-            lora_unmatch = ldm_patched.modules.utils.load_torch_file(lora_filename, safe_load=False)
->>>>>>> upstream/main
+            
             lora_unet, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_unet)
             lora_clip, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_clip)
 
