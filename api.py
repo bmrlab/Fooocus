@@ -120,6 +120,9 @@ class UniversalRequest(BaseModel):
     control_images: List[dict] = []
     # used to control pipeline
     current_tab: Optional[str] = "inpaint"
+    # overwrite some default value
+    overwrite_vary_strength: Optional[float] = -1.0
+    overwrite_upscale_strength: Optional[float] = -1.0
 
 
 def load_base64(base64_string: str):
@@ -144,9 +147,9 @@ def handler(req: UniversalRequest):
         -1,
         -1,
         -1,
-        -1,
-        -1,
-        False,
+        req.overwrite_vary_strength,
+        req.overwrite_upscale_strength,
+        True,
         True,
         False,
         req.skipping_cn_preprocessor,

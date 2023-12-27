@@ -336,7 +336,7 @@ with shared.gradio_root:
                                                    info='When to end the guidance from positive/negative ADM. ')
 
                         refiner_swap_method = gr.Dropdown(label='Refiner swap method', value='joint',
-                                                          choices=['joint', 'separate', 'vae', 'product'])
+                                                          choices=['joint', 'separate', 'vae'])
 
                         adaptive_cfg = gr.Slider(label='CFG Mimicking from TSNR', minimum=1.0, maximum=30.0, step=0.01,
                                                  value=modules.config.default_cfg_tsnr,

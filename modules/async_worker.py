@@ -833,7 +833,6 @@ def worker():
                     callback=callback,
                     sampler_name=final_sampler_name,
                     scheduler_name=final_scheduler_name,
-                    task=task,
                     latent=initial_latent,
                     denoise=denoising_strength,
                     tiled=tiled,
