@@ -1,20 +1,4 @@
 import threading
-from PIL import Image
-import io
-import base64
-
-global_results = []
-global_progress_results = []
-
-
-def encode_img2base64(np_image):
-    image = Image.fromarray(np_image)
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = buffered.getvalue()
-    img_base64 = base64.b64encode(img_str)
-    img_base64_str = img_base64.decode('utf-8')
-    return img_base64_str
 
 
 class AsyncTask:
@@ -27,7 +11,7 @@ class AsyncTask:
 async_tasks = []
 
 def worker():
-    global async_tasks, global_results, global_progress_results
+    global async_tasks
 
     import traceback
     import math
@@ -796,17 +780,6 @@ def worker():
                 f'Step {step}/{total_steps} in the {current_task_id + 1}-th Sampling',
                 y)])
 
-            _item = {
-                "type": "preview",
-                "progress": (step + 1) / total_steps,
-                "image_base64": encode_img2base64(y)
-            }
-            if not global_progress_results or global_progress_results[-1]["type"] == "finish":
-                global_progress_results.append(_item)
-            else:
-                global_progress_results[-1] = _item
-            global_progress_results[-1]["index"] = len(global_progress_results) - 1
-
         for current_task_id, task in enumerate(tasks):
             execution_start_time = time.perf_counter()
 
@@ -878,12 +851,6 @@ def worker():
 
                 yield_result(async_task, imgs, do_not_show_finished_images=len(tasks) == 1)
 
-                global_progress_results.pop()
-                global_progress_results.append(
-                    {"type": "finish", "index": len(global_progress_results), "progress": 1,
-                     "image_base64_list": encode_img2base64(imgs[0])}
-                )
-
             except ldm_patched.modules.model_management.InterruptProcessingException as e:
                 if shared.last_stop == 'skip':
                     print('User skipped')
@@ -902,10 +869,15 @@ def worker():
         if len(async_tasks) > 0:
             task = async_tasks.pop(0)
             try:
+                # MODIFIED BY MUSE
+                # set advanced parameter when task is handled
+                from muse_helper.task_queue import task_queue
+                task_queue.set_task_advanced_parameters(task)
+                # END
+
                 handler(task)
                 build_image_wall(task)
                 task.yields.append(['finish', task.results])
-                global_progress_results = []
                 pipeline.prepare_text_encoder(async_call=True)
             except:
                 traceback.print_exc()
