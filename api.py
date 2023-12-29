@@ -143,7 +143,7 @@ async def generation(req: UniversalRequest, current_user=Depends(get_current_use
             content={"error": "Server is busy processing other requests"},
         )
 
-    return attrs.asdict(task)
+    return {"task_id": task.task_id}
 
 
 @app.post("/v1/token", response_model=Token)
