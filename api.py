@@ -18,7 +18,10 @@ from pydantic import BaseModel
 
 import modules.async_worker
 import muse_helper.task_queue
-from muse_helper.async_task import async_task_to_response
+from muse_helper.async_task import (
+    async_task_to_result_response,
+    async_task_to_preview_response,
+)
 from muse_helper.exception import QueueFullException
 
 app = FastAPI()
@@ -170,8 +173,22 @@ def result(task_id: str):
 
     try:
         if res is not None:
-            response_data = async_task_to_response(res.async_task)
+            response_data = async_task_to_result_response(res.async_task)
+            return {"task_id": res.task_id, **response_data}
+        else:
+            return {"message": "Task not found"}
+    except Exception as e:
+        e.with_traceback()
+        return {"message": f"{e}"}
 
+
+@app.get("/v1/preview/{task_id}")
+def preview(task_id: str):
+    res = muse_helper.task_queue.task_queue.get_task_result(task_id)
+
+    try:
+        if res is not None:
+            response_data = async_task_to_preview_response(res.async_task)
             return {"task_id": res.task_id, **response_data}
         else:
             return {"message": "Task not found"}
@@ -200,4 +217,6 @@ if __name__ == "__main__":
 
     port = os.environ.get("PORT", "7860")
 
-    uvicorn.run("api:app", host="0.0.0.0", port=int(port), log_level="critical", workers=1)
+    uvicorn.run(
+        "api:app", host="0.0.0.0", port=int(port), log_level="critical", workers=1
+    )

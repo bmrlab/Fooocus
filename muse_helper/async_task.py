@@ -17,11 +17,9 @@ def np_to_base64(image_np):
     return b64_string
 
 
-def async_task_to_response(async_task: AsyncTask) -> Dict:
+def async_task_to_preview_response(async_task: AsyncTask) -> Dict:
     yields = async_task.yields
     previews = []
-    is_finished = False
-    results = []
 
     preview_parts = [[]]
     for item in yields:
@@ -31,8 +29,6 @@ def async_task_to_response(async_task: AsyncTask) -> Dict:
                 preview_parts[-1].append(item[1])
         elif item[0] == "results":
             preview_parts.append([])
-        elif item[0] == "finish":
-            is_finished = True
         else:
             pass
 
@@ -40,7 +36,20 @@ def async_task_to_response(async_task: AsyncTask) -> Dict:
         if len(part) > 0:
             previews.append(np_to_base64(part[-1][-1]))
 
+    return {"previews": previews}
+
+
+def async_task_to_result_response(async_task: AsyncTask) -> Dict:
+    yields = async_task.yields
+    is_finished = False
+    results = []
+
+    # quickly get results
+    for item in reversed(yields):
+        if item[0] == "finish":
+            is_finished = True
+
     if is_finished:
         results = [np_to_base64(item) for item in async_task.results]
 
-    return {"previews": previews, "finished": is_finished, "results": results}
+    return {"finished": is_finished, "results": results}
