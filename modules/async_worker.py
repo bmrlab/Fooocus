@@ -903,8 +903,12 @@ def worker():
             try:
                 # MODIFIED BY MUSE
                 # set advanced parameter when task is handled
-                from muse_helper.task_queue import task_queue
-                task_queue.set_task_advanced_parameters(task)
+                try:
+                    from muse_helper.task_queue import task_queue
+                    task_queue.set_task_advanced_parameters(task)
+                except:
+                    # ignore exception for webui usage
+                    pass
                 # END
 
                 handler(task)
