@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 
 import modules.async_worker as worker
-from api import UniversalRequest
+from muse_helper.api_model import UniversalRequest
 from muse_helper.task import Task
 
 

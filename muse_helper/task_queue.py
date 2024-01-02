@@ -2,8 +2,8 @@ from collections import OrderedDict
 from typing import Optional
 
 import modules.advanced_parameters
-from api import UniversalRequest
 from modules.async_worker import AsyncTask, async_tasks
+from muse_helper.api_model import UniversalRequest
 from muse_helper.exception import QueueFullException
 from muse_helper.handler import handler
 from muse_helper.task import Task
