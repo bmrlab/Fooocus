@@ -452,14 +452,14 @@ def downloading_controlnet_canny():
     )
     return os.path.join(path_controlnet, 'control-lora-canny-rank128.safetensors')
 
-
 def download_controlnet_canny_diffusers():
     load_file_from_url(
-        url="https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/diffusers_xl_canny_small.safetensors",
-        model_dir=controlnet_models_path,
-        file_name='diffusers_xl_canny_small.safetensors'
+        url="https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors",
+        model_dir=path_controlnet,
+        file_name='controlnet-canny-sdxl-1.0.safetensors'
     )
-    return os.path.join(controlnet_models_path, 'diffusers_xl_canny_small.safetensors')
+    return os.path.join(path_controlnet, 'controlnet-canny-sdxl-1.0.safetensors')
+
 
 def downloading_controlnet_cpds():
     load_file_from_url(
@@ -469,6 +469,13 @@ def downloading_controlnet_cpds():
     )
     return os.path.join(path_controlnet, 'fooocus_xl_cpds_128.safetensors')
 
+def download_controlnet_depth_diffusers():
+    load_file_from_url(
+        url="https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/blob/main/diffusion_pytorch_model.fp16.safetensors",
+        model_dir=path_controlnet,
+        file_name='controlnet-depth-sdxl-1.0.safetensors'
+    )
+    return os.path.join(path_controlnet, 'controlnet-depth-sdxl-1.0.safetensors')
 
 def downloading_ip_adapters(v):
     assert v in ['ip', 'face']
