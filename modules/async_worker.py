@@ -752,12 +752,6 @@ def worker():
                 if advanced_parameters.debugging_cn_preprocessor:
                     yield_result(async_task, cn_img, do_not_show_finished_images=True)
                     return
-                cn_img, cn_stop, cn_weight = task
-                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
-                task[0] = core.numpy_to_pytorch(cn_img)
-                if advanced_parameters.debugging_cn_preprocessor:
-                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
-                    return
             for task in cn_tasks[flags.cn_ip]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = HWC3(cn_img)
