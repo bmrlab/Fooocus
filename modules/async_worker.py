@@ -46,6 +46,8 @@ def worker():
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image
     from modules.upscaler import perform_upscale
 
+    from muse_helper.open_pose import open_pose
+
     try:
         async_gradio_app = shared.gradio_root
         flag = f'''App started successful. Use the app with {str(async_gradio_app.local_url)} or {str(async_gradio_app.server_name)}:{str(async_gradio_app.server_port)}'''
@@ -318,6 +320,10 @@ def worker():
                     controlnet_canny_diffusers_path= modules.config.download_controlnet_canny_diffusers()
                 if len(cn_tasks[flags.cn_depth_diffusers]) > 0:
                     controlnet_depth_diffusers_path = modules.config.download_controlnet_depth_diffusers()
+                if len(cn_tasks[flags.t2ia_openpose]) > 0:
+                    t2i_adapter_openpose_path = modules.config.download_t2i_adapter_openposee()
+                if len(cn_tasks[flags.t2ia_sketch]) > 0:
+                    t2i_adapter_sketch_path = modules.config.download_t2i_adapter_sketch()
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
@@ -729,6 +735,25 @@ def worker():
                 if advanced_parameters.debugging_cn_preprocessor:
                     yield_result(async_task, cn_img, do_not_show_finished_images=True)
                     return
+            for task in cn_tasks[flags.t2ia_openpose]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+
+                if not advanced_parameters.skipping_cn_preprocessor:
+                    cn_img = open_pose(cn_img)
+
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
+                if advanced_parameters.debugging_cn_preprocessor:
+                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
+                    return
+            for task in cn_tasks[flags.t2ia_sketch]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+                task[0] = core.numpy_to_pytorch(cn_img)
+                if advanced_parameters.debugging_cn_preprocessor:
+                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
+                    return
             for task in cn_tasks[flags.cn_ip]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = HWC3(cn_img)
@@ -822,6 +847,8 @@ def worker():
                         (flags.cn_cpds, controlnet_cpds_path),
                         (flags.cn_canny_diffusers, controlnet_canny_diffusers_path),
                         (flags.cn_depth_diffusers, controlnet_depth_diffusers_path),
+                        (flags.t2ia_openpose, t2i_adapter_openpose_path),
+                        (flags.t2ia_sketch, t2i_adapter_sketch_path),
                     ]:
                         for cn_img, cn_stop, cn_weight in cn_tasks[cn_flag]:
                             positive_cond, negative_cond = core.apply_controlnet(
