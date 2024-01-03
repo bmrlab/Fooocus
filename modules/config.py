@@ -477,21 +477,13 @@ def download_controlnet_depth_diffusers():
     )
     return os.path.join(path_controlnet, 'controlnet-depth-sdxl-1.0.safetensors')
 
-def download_t2i_adapter_openposee():
-    file_name = "t2i-adapter-openpose-sdxl-1.0.safetensors"
-    load_file_from_url(
-        url="https://huggingface.co/TencentARC/t2i-adapter-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors",
-        model_dir=path_controlnet,
-        file_name=file_name,
-    )
-    return os.path.join(path_controlnet, file_name)
 
-def download_t2i_adapter_sketch():
-    file_name = "t2i-adapter-sketch-sdxl-1.0.safetensors"
+def download_controlnet_openpose():
+    file_name = "control-lora-openposeXL2-rank256.safetensors"
     load_file_from_url(
-        url="https://huggingface.co/TencentARC/t2i-adapter-sketch-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors",
+        url="https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/control-lora-openposeXL2-rank256.safetensors",
         model_dir=path_controlnet,
-        file_name=file_name,
+        file_name=file_name
     )
     return os.path.join(path_controlnet, file_name)
 

@@ -311,15 +311,15 @@ class ControlLora(ControlNet):
         return ldm_patched.modules.utils.calculate_parameters(self.control_weights) * ldm_patched.modules.model_management.dtype_size(dtype) + ControlBase.inference_memory_requirements(self, dtype)
 
 def load_controlnet(ckpt_path, model=None):
-    controlnet_data = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
+    controlnet_data = ldm_patched.modules.utils.load_torch_file(ckpt_path, safe_load=True)
     if "lora_controlnet" in controlnet_data:
         return ControlLora(controlnet_data)
 
     controlnet_config = None
     if "controlnet_cond_embedding.conv_in.weight" in controlnet_data: #diffusers format
-        unet_dtype = comfy.model_management.unet_dtype()
-        controlnet_config = comfy.model_detection.unet_config_from_diffusers_unet(controlnet_data, unet_dtype)
-        diffusers_keys = comfy.utils.unet_to_diffusers(controlnet_config)
+        unet_dtype = ldm_patched.modules.model_management.unet_dtype()
+        controlnet_config = ldm_patched.modules.model_detection.unet_config_from_diffusers_unet(controlnet_data, unet_dtype)
+        diffusers_keys = ldm_patched.modules.utils.unet_to_diffusers(controlnet_config)
         diffusers_keys["controlnet_mid_block.weight"] = "middle_block_out.0.weight"
         diffusers_keys["controlnet_mid_block.bias"] = "middle_block_out.0.bias"
 
