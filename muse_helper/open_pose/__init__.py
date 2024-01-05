@@ -260,4 +260,4 @@ def open_pose(x: np.ndarray):
     if detector is None:
         detector = OpenposeDetector.from_pretrained("lllyasviel/ControlNet", cache_dir="./models/controlnet")
     
-    return detector(x, detect_resolution=1024, output_type="np")
+    return detector(x, detect_resolution=1024, output_type="np", include_body=True, include_face=True, include_hand=True)

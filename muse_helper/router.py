@@ -49,6 +49,15 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     return encoded_jwt
 
 
+def logger(msg: str):
+    """
+    logger function
+
+    TODO should not using print
+    """
+    print(f"[Muse] {msg}")
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -97,11 +106,29 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 async def generation(req: UniversalRequest, current_user=Depends(get_current_user)):
     try:
         task = muse_helper.task_queue.task_queue.add_task(dict(req))
+
+        params_for_logger = dict(req)
+        # extract image field which will be base64 string
+        # we log it separately
+        for key in ["inpaint_image", "mask_image", "uov_image"]:
+            value = params_for_logger.pop(key, None)
+            logger(f"task {str(task.task_id)} {key}: {value}")
+
+        for idx, item in enumerate(params_for_logger.pop("control_images", [])):
+            image = item.pop("image")
+            logger(f"task {str(task.task_id)} control image ({idx}): {image}")
+            logger(f"task {str(task.task_id)} control image ({idx}): {item}")
+
+        # logger remaining fields
+        logger(f"task {str(task.task_id)} params: {params_for_logger}")
+
     except QueueFullException:
         return JSONResponse(
             status_code=429,
             content={"error": "Server is busy processing other requests"},
         )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": e})
 
     return {"task_id": task.task_id}
 
