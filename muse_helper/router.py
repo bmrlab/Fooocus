@@ -58,6 +58,10 @@ def logger(msg: str):
     print(f"[Muse] {msg}")
 
 
+def convert_base64_for_logger(base64_str: str):
+    return base64_str[:10]
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -112,11 +116,16 @@ async def generation(req: UniversalRequest, current_user=Depends(get_current_use
         # we log it separately
         for key in ["inpaint_image", "mask_image", "uov_image"]:
             value = params_for_logger.pop(key, None)
-            logger(f"task {str(task.task_id)} {key}: {value}")
+            if value is not None:
+                logger(
+                    f"task {str(task.task_id)} {key}: {convert_base64_for_logger(value)}"
+                )
 
         for idx, item in enumerate(params_for_logger.pop("control_images", [])):
             image = item.pop("image")
-            logger(f"task {str(task.task_id)} control image ({idx}): {image}")
+            logger(
+                f"task {str(task.task_id)} control image ({idx}): {convert_base64_for_logger(image)}"
+            )
             logger(f"task {str(task.task_id)} control image ({idx}): {item}")
 
         # logger remaining fields
