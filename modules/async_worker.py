@@ -877,7 +877,12 @@ def worker():
                         for cn_img, cn_stop, cn_weight in cn_tasks[cn_flag]:
                             positive_cond, negative_cond = core.apply_controlnet(
                                 positive_cond, negative_cond,
-                                pipeline.loaded_ControlNets[cn_path], cn_img, cn_weight, 0, cn_stop)
+                                pipeline.loaded_ControlNets[cn_path],
+                                cn_img,
+                                cn_weight,
+                                0 if cn_flag != flags.cn_qr_code else 0.12,
+                                cn_stop
+                            )
 
                 imgs = pipeline.process_diffusion(
                     positive_cond=positive_cond,
