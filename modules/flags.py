@@ -27,6 +27,7 @@ cn_cpds = "CPDS"
 cn_canny_diffusers = "CannyDiffusers"
 cn_depth_diffusers = "DepthDiffusers"
 cn_openpose = "OpenPose"
+cn_qr_code = "QRCode"
 
 
 ip_list = [cn_ip, cn_canny, cn_cpds, cn_ip_face, cn_canny_diffusers, cn_depth_diffusers, cn_openpose]
@@ -40,6 +41,7 @@ default_parameters = {
     cn_canny_diffusers: (0.5, 1.0),
     cn_depth_diffusers: (0.5, 1.0),
     cn_openpose: (0.5, 1.0),
+    cn_qr_code: (1.0, 1.0)
 }  # stop, weight
 
 inpaint_engine_versions = ['None', 'v1', 'v2.5', 'v2.6']

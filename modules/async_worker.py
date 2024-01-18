@@ -245,6 +245,7 @@ def worker():
         controlnet_cpds_path = None
         controlnet_depth_diffusers_path = None
         controlnet_openpose_path = None
+        controlnet_qr_code_path = None
         clip_vision_path, ip_negative_path, ip_adapter_path, ip_adapter_face_path = None, None, None, None
 
         seed = int(image_seed)
@@ -340,6 +341,8 @@ def worker():
                     controlnet_depth_diffusers_path = modules.config.download_controlnet_depth_diffusers()
                 if len(cn_tasks[flags.cn_openpose]) > 0:
                     controlnet_openpose_path = modules.config.download_controlnet_openpose()
+                if len(cn_tasks[flags.cn_qr_code]) > 0:
+                    controlnet_qr_code_path = modules.config.download_controlnet_qr_code()
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
@@ -368,6 +371,7 @@ def worker():
             controlnet_canny_diffusers_path,
             controlnet_depth_diffusers_path,
             controlnet_openpose_path,
+            controlnet_qr_code_path,
         ])
         ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
         ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
@@ -769,6 +773,11 @@ def worker():
                 if advanced_parameters.debugging_cn_preprocessor:
                     yield_result(async_task, cn_img, do_not_show_finished_images=True)
                     return
+            for task in cn_tasks[flags.cn_qr_code]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
             for task in cn_tasks[flags.cn_ip]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = HWC3(cn_img)
@@ -863,6 +872,7 @@ def worker():
                         (flags.cn_canny_diffusers, controlnet_canny_diffusers_path),
                         (flags.cn_depth_diffusers, controlnet_depth_diffusers_path),
                         (flags.cn_openpose, controlnet_openpose_path),
+                        (flags.cn_qr_code, controlnet_qr_code_path),
                     ]:
                         for cn_img, cn_stop, cn_weight in cn_tasks[cn_flag]:
                             positive_cond, negative_cond = core.apply_controlnet(

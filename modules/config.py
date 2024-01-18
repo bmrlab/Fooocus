@@ -487,6 +487,17 @@ def download_controlnet_openpose():
     )
     return os.path.join(path_controlnet, file_name)
 
+
+def download_controlnet_qr_code():
+    file_name = "control_v1p_sdxl_qrcode_monster.safetensors"
+    load_file_from_url(
+        url="https://huggingface.co/monster-labs/control_v1p_sdxl_qrcode_monster/resolve/main/diffusion_pytorch_model.safetensors",
+        model_dir=path_controlnet,
+        file_name=file_name
+    )
+    return os.path.join(path_controlnet, file_name)
+
+
 def downloading_ip_adapters(v):
     assert v in ['ip', 'face']
 
