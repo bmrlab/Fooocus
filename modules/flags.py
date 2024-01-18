@@ -30,7 +30,7 @@ cn_openpose = "OpenPose"
 cn_qr_code = "QRCode"
 
 
-ip_list = [cn_ip, cn_canny, cn_cpds, cn_ip_face, cn_canny_diffusers, cn_depth_diffusers, cn_openpose]
+ip_list = [cn_ip, cn_canny, cn_cpds, cn_ip_face, cn_canny_diffusers, cn_depth_diffusers, cn_openpose, cn_qr_code]
 default_ip = cn_ip
 
 default_parameters = {

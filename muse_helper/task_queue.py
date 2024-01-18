@@ -83,6 +83,9 @@ class TaskQueue:
             req.inpaint_engine,
             req.inpaint_strength,
             req.inpaint_respective_field,
+            req.inpaint_mask_upload_checkbox,
+            req.invert_mask_checkbox,
+            req.inpaint_erode_or_dilate,
         )
 
 

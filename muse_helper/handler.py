@@ -90,6 +90,7 @@ def handler(input_task: Task):
         if req.inpaint_image is not None
         else None,
         req.inpaint_additional_prompt,
+        req.inpaint_mask_image_upload,
         *control_net_args_list,
     )
 

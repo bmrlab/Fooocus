@@ -35,6 +35,9 @@ class UniversalRequest(BaseModel):
     inpaint_engine: str = "v1"  # v1, v2.5, v2.6
     inpaint_strength: float = 1.0
     inpaint_respective_field: float = 0.618
+    inpaint_mask_upload_checkbox: bool = False
+    invert_mask_checkbox: bool = False
+    inpaint_erode_or_dilate: float = 0.0
     refiner_swap_method: str = "joint"  # joint, separate, vae
     enable_free_u: bool = True
     free_u_b1: float = 1.01
@@ -49,6 +52,7 @@ class UniversalRequest(BaseModel):
     outpaint_mode: List[str] = []
     mask_image: Optional[str] = None
     inpaint_additional_prompt: str = ""
+    inpaint_mask_image_upload: Optional[str] = None
     # control net
     control_images: List[dict] = []
     # used to control pipeline
