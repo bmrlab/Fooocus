@@ -775,7 +775,8 @@ def worker():
                     return
             for task in cn_tasks[flags.cn_qr_code]:
                 cn_img, cn_stop, cn_weight = task
-                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+                # use resize mode 3 so that qr code will in the center of image
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height, resize_mode=3)
                 cn_img = HWC3(cn_img)
                 task[0] = core.numpy_to_pytorch(cn_img)
             for task in cn_tasks[flags.cn_ip]:
