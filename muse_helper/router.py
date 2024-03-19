@@ -114,7 +114,7 @@ async def generation(req: FooocusTaskInput, current_user=Depends(get_current_use
         req_dict = dict(req)
         if req.seed is None:
             req_dict["seed"] = random.randint(0, 2**63 - 1)
-        task = muse_helper.task_queue.task_queue.add_task(dict(req))
+        task = muse_helper.task_queue.task_queue.add_task(req_dict)
 
         params_for_logger = dict(req)
         # extract image field which will be base64 string

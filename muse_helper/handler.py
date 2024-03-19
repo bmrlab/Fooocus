@@ -103,7 +103,7 @@ def handler(input_task: Task):
         1.5, # adm_scaler_positive
         0.8, # adm_scaler_negative
         0.3, # adm_scaler_end
-        -1, # adaptive_cfg
+        7, # adaptive_cfg
         req.sampler, # sampler_name
         req.scheduler, # scheduler_name
         -1, # overwrite_step
