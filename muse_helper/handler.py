@@ -5,7 +5,8 @@ import numpy as np
 from PIL import Image
 
 import modules.async_worker as worker
-from muse_helper.api_model import UniversalRequest
+import modules.flags as flags
+from muse_helper.api_model import FooocusTaskInput
 from muse_helper.task import Task
 
 
@@ -15,10 +16,12 @@ def load_base64(base64_string: str):
     image = Image.open(BytesIO(image_bytes))
 
     return np.array(image)
-
+ 
 
 def handler(input_task: Task):
-    req = UniversalRequest(**input_task.params)
+    import modules.config
+
+    req = FooocusTaskInput(**input_task.params)
 
     # preprocess lora args
     lora_args_list = []
@@ -29,16 +32,19 @@ def handler(input_task: Task):
             has_default_lora = True
             break
 
-    if len(req.lora_models) < 5 and not has_default_lora:
+    if len(req.lora_models) < modules.config.default_max_lora_number and not has_default_lora:
         # add basic offset lora
+        lora_args_list.append(True)
         lora_args_list.append("sd_xl_offset_example-lora_1.0.safetensors")
         lora_args_list.append(0.5)
     for item in req.lora_models:
+        lora_args_list.append(True)
         lora_args_list.append(item["model"])
         lora_args_list.append(item["weight"])
-    while len(lora_args_list) < 10:
+    while len(lora_args_list) < 3 * modules.config.default_max_lora_number:
+        lora_args_list.append(False)
         lora_args_list.append("None")
-        lora_args_list.append(1)
+        lora_args_list.append(0.1)
 
     # preprocess control net args
     control_net_args_list = []
@@ -47,7 +53,7 @@ def handler(input_task: Task):
         control_net_args_list.append(item["stop_at"])
         control_net_args_list.append(item["weight"])
         control_net_args_list.append(item["mode"])
-    while len(control_net_args_list) < 16:
+    while len(control_net_args_list) < flags.controlnet_image_count * 4:
         control_net_args_list.append(None)
         control_net_args_list.append(0.5)
         control_net_args_list.append(0.6)
@@ -60,27 +66,27 @@ def handler(input_task: Task):
         style.append("Fooocus V2")
 
     worker_args = (
-        req.prompt,  # str in 'parameter_8' Textbox component
-        req.negative_prompt,  # str in 'Negative Prompt' Textbox component
-        style,  # List[str] in 'Image Style' Checkboxgroup component
-        req.mode,  # str in 'Performance' Radio component
-        f"{req.width}×{req.height}",  # str in 'Aspect Ratios' Radio component
-        req.batch_size,  # int | float (numeric value between 1 and 32) in 'Image Number' Slider component
-        req.seed,  # int | float in 'Seed' Number component
-        req.sharpness,  # int | float (numeric value between 0.0 and 30.0) in 'Sampling Sharpness' Slider component
-        req.guidance_scale,  # int | float (numeric value between 1.0 and 30.0) in 'Guidance Scale' Slider component
-        req.model,
-        # str (Option from: ['sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Base Model' Dropdown component
-        req.refiner,
-        # str (Option from: ['None', 'sd_xl_base_1.0_0.9vae.safetensors', 'sd_xl_refiner_1.0_0.9vae.safetensors']) in 'SDXL Refiner' Dropdown component
-        req.refiner_switch,
-        # 5 loras
-        *lora_args_list,
-        req.enable_input_image,  # bool in 'Input Image' Checkbox component
-        req.current_tab,  # str in 'parameter_68' Textbox component
-        req.uov_mode,  # str in 'Upscale or Variation:' Radio component
-        load_base64(req.uov_image) if req.uov_image is not None else None,
-        req.outpaint_mode,
+        False, # generate_image_grid
+        req.prompt, # prompt
+        req.negative_prompt, # negative_prompt
+        style,  # style_selections
+        req.mode, # performance_selection
+        f"{req.width}×{req.height}",  # aspect_ratios_selection
+        req.batch_size,  # image_number
+        "png",  # output_format
+        req.seed,  # image_seed
+        True, # read_wildcards_in_order
+        req.sharpness,  # sharpness
+        req.guidance_scale,  # guidance_scale
+        req.model, # base_model_name
+        req.refiner, # refiner_model_name
+        req.refiner_switch, # refiern_switch
+        *lora_args_list, # loras
+        req.enable_input_image,  # input_image_checkbox
+        req.current_tab,  # current_tab
+        req.uov_mode,  # uov_method
+        load_base64(req.uov_image) if req.uov_image is not None else None, # uov_input_image
+        req.outpaint_mode, # outpaint_seletions
         {
             "image": load_base64(req.inpaint_image),
             "mask": load_base64(req.mask_image)
@@ -88,10 +94,48 @@ def handler(input_task: Task):
             else np.zeros_like(load_base64(req.inpaint_image)),
         }
         if req.inpaint_image is not None
-        else None,
-        req.inpaint_additional_prompt,
-        req.inpaint_mask_image_upload,
-        *control_net_args_list,
+        else None, # inpaint_input_image
+        req.inpaint_additional_prompt, # inpaint_additional_prompt
+        req.inpaint_mask_image_upload, # inpaint_mask_image_upload
+        False, # disable_preview
+        False, # disable_intermediate_results
+        False, # disable_seed_increment
+        1.5, # adm_scaler_positive
+        0.8, # adm_scaler_negative
+        0.3, # adm_scaler_end
+        -1, # adaptive_cfg
+        req.sampler, # sampler_name
+        req.scheduler, # scheduler_name
+        -1, # overwrite_step
+        -1, # overwrite_switch
+        -1, # overwrite_width
+        -1, # overwrite_height
+        -1, # overwrite_vary_strength
+        -1, # overwrite_upscale_strength
+        True, # mixing_image_prompt_and_vary_upscale
+        True, # mixing_image_prompt_and_inpaint
+        False, # debugging_cn_preprocessor
+        False, # skipping_cn_preprocessor
+        req.canny_low_threshold, # canny_low_threshold
+        req.canny_high_threshold, # canny_high_threshold
+        req.refiner_swap_method, # refiner_swap_method
+        req.controlnet_softness, # controlnet_softness
+        req.enable_free_u, # freeu_enabled
+        req.free_u_b1, # freeu_b1
+        req.free_u_b2, # freeu_b2
+        req.free_u_s1, # freeu_s1
+        req.free_u_s2, # freeu_s2
+        False, # debugging_inpaint_preprocessor
+        req.inpaint_disable_initial_latent, # inpaint_disable_initial_latent
+        req.inpaint_engine, # inpaint_engine
+        req.inpaint_strength, # inpaint_strength
+        req.inpaint_respective_field, # inpaint_respective_field
+        False, # inpaint_mask_upload_checkbox
+        False, # invert_mask_checkbox
+        req.inpaint_erode_or_dilate, # inpaint_erode_or_dilate
+        False, # save_metadata_to_images
+        "fooocus", # metadata_schema ,
+        *control_net_args_list,  # cn_tasks
     )
 
     task = worker.AsyncTask(args=list(worker_args))

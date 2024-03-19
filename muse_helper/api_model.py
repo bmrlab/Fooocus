@@ -8,7 +8,7 @@ class Token(BaseModel):
     token_type: str
 
 
-class UniversalRequest(BaseModel):
+class FooocusTaskInput(BaseModel):
     model: str = "sd_xl_base_1.0_0.9vae.safetensors"
     refiner: str = "sd_xl_refiner_1.0_0.9vae.safetensors"
     refiner_switch: float = 0.8

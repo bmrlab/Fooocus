@@ -3,9 +3,11 @@ import sys
 
 import uvicorn
 
+from modules import config # this must be imported
 import modules.async_worker  # this must be imported
 from args_manager import args  # this must be imported
 from muse_helper.router import app  # this must be imported
+
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.abspath(__file__))

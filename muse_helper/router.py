@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from PIL import Image
 
 import muse_helper.task_queue
-from muse_helper.api_model import Token, UniversalRequest
+from muse_helper.api_model import Token, FooocusTaskInput
 from muse_helper.async_task import (
     async_task_to_preview_response,
     async_task_to_result_response,
@@ -107,7 +107,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 @app.post("/v1/generation")
-async def generation(req: UniversalRequest, current_user=Depends(get_current_user)):
+async def generation(req: FooocusTaskInput, current_user=Depends(get_current_user)):
     try:
         task = muse_helper.task_queue.task_queue.add_task(dict(req))
 
