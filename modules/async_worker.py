@@ -52,6 +52,8 @@ def worker():
     from modules.flags import Performance
     from modules.meta_parser import get_metadata_parser, MetadataScheme
 
+    from muse_helper.open_pose import open_pose
+
     pid = os.getpid()
     print(f'Started worker with PID {pid}')
 
@@ -131,7 +133,6 @@ def worker():
         async_task.processing = True
 
         args = async_task.args
-        print(args)
         args.reverse()
 
         prompt = args.pop()
@@ -385,10 +386,18 @@ def worker():
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters(
                         'face')
+                if len(cn_tasks[flags.cn_canny_diffusers]) > 0:
+                    controlnet_canny_diffusers_path = modules.config.downloading_controlnet_canny_diffusers()
+                if len(cn_tasks[flags.cn_depth_diffusers]) > 0:
+                    controlnet_depth_diffusers_path = modules.config.downloading_controlnet_depth_diffusers()
+                if len(cn_tasks[flags.cn_openpose]) > 0:
+                    controlnet_openpose_path = modules.config.downloading_controlnet_openpose()
+                if len(cn_tasks[flags.cn_qr_code]) > 0:
+                    controlnet_qr_code_path = modules.config.downloading_controlnet_qr_code()
                 progressbar(async_task, 1, 'Loading control models ...')
 
         # Load or unload CNs
-        pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path])
+        pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path, controlnet_canny_diffusers_path, controlnet_depth_diffusers_path, controlnet_openpose_path, controlnet_qr_code_path])
         ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
         ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
 
@@ -704,6 +713,18 @@ def worker():
                 if debugging_cn_preprocessor:
                     yield_result(async_task, cn_img, do_not_show_finished_images=True)
                     return
+            for task in cn_tasks[flags.cn_canny_diffusers]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+
+                if not skipping_cn_preprocessor:
+                    cn_img = preprocessors.canny_naive(cn_img)
+
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
+                if debugging_cn_preprocessor:
+                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
+                    return
             for task in cn_tasks[flags.cn_cpds]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = resize_image(HWC3(cn_img), width=width, height=height)
@@ -716,6 +737,36 @@ def worker():
                 if debugging_cn_preprocessor:
                     yield_result(async_task, cn_img, do_not_show_finished_images=True)
                     return
+            for task in cn_tasks[flags.cn_depth_diffusers]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+
+                if not skipping_cn_preprocessor:
+                    cn_img = preprocessors.cpds(cn_img)
+
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
+                if debugging_cn_preprocessor:
+                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
+                    return
+            for task in cn_tasks[flags.cn_openpose]:
+                cn_img, cn_stop, cn_weight = task
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+
+                if not skipping_cn_preprocessor:
+                    cn_img = open_pose(cn_img)
+
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
+                if debugging_cn_preprocessor:
+                    yield_result(async_task, cn_img, do_not_show_finished_images=True)
+                    return
+            for task in cn_tasks[flags.cn_qr_code]:
+                cn_img, cn_stop, cn_weight = task
+                # use resize mode 3 so that qr code will in the center of image
+                cn_img = resize_image(HWC3(cn_img), width=width, height=height, resize_mode=3)
+                cn_img = HWC3(cn_img)
+                task[0] = core.numpy_to_pytorch(cn_img)
             for task in cn_tasks[flags.cn_ip]:
                 cn_img, cn_stop, cn_weight = task
                 cn_img = HWC3(cn_img)

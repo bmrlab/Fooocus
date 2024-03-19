@@ -630,7 +630,7 @@ def downloading_controlnet_canny():
     return os.path.join(path_controlnet, 'control-lora-canny-rank128.safetensors')
 
 
-def download_controlnet_canny_diffusers():
+def downloading_controlnet_canny_diffusers():
     load_file_from_url(
         url="https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors",
         model_dir=path_controlnet,
@@ -649,7 +649,7 @@ def downloading_controlnet_cpds():
 
 
 
-def download_controlnet_depth_diffusers():
+def downloading_controlnet_depth_diffusers():
     load_file_from_url(
         url="https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/blob/main/diffusion_pytorch_model.fp16.safetensors",
         model_dir=path_controlnet,
@@ -658,7 +658,7 @@ def download_controlnet_depth_diffusers():
     return os.path.join(path_controlnet, 'controlnet-depth-sdxl-1.0.safetensors')
 
 
-def download_controlnet_openpose():
+def downloading_controlnet_openpose():
     file_name = "control-lora-openposeXL2-rank256.safetensors"
     load_file_from_url(
         url="https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/control-lora-openposeXL2-rank256.safetensors",
@@ -668,7 +668,7 @@ def download_controlnet_openpose():
     return os.path.join(path_controlnet, file_name)
 
 
-def download_controlnet_qr_code():
+def downloading_controlnet_qr_code():
     file_name = "control_v1p_sdxl_qrcode_monster.safetensors"
     load_file_from_url(
         url="https://huggingface.co/monster-labs/control_v1p_sdxl_qrcode_monster/resolve/main/diffusion_pytorch_model.safetensors",
