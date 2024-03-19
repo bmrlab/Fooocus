@@ -19,6 +19,8 @@ from muse_helper.async_task import (
 )
 from muse_helper.exception import QueueFullException
 
+import random
+
 app = FastAPI()
 
 app.add_middleware(
@@ -109,6 +111,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.post("/v1/generation")
 async def generation(req: FooocusTaskInput, current_user=Depends(get_current_user)):
     try:
+        req_dict = dict(req)
+        if req.seed is None:
+            req_dict["seed"] = random.randint(0, 2**63 - 1)
         task = muse_helper.task_queue.task_queue.add_task(dict(req))
 
         params_for_logger = dict(req)
