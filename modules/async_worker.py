@@ -722,7 +722,7 @@ def worker():
                 cn_img = resize_image(HWC3(cn_img), width=width, height=height)
 
                 if not skipping_cn_preprocessor:
-                    cn_img = preprocessors.canny_naive(cn_img)
+                    cn_img = preprocessors.canny_naive(cn_img, canny_low_threshold, canny_high_threshold)
 
                 cn_img = HWC3(cn_img)
                 task[0] = core.numpy_to_pytorch(cn_img)
