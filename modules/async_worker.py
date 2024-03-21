@@ -862,7 +862,11 @@ def worker():
                 if 'cn' in goals:
                     for cn_flag, cn_path in [
                         (flags.cn_canny, controlnet_canny_path),
-                        (flags.cn_cpds, controlnet_cpds_path)
+                        (flags.cn_cpds, controlnet_cpds_path),
+                        (flags.cn_canny_diffusers, controlnet_canny_diffusers_path),
+                        (flags.cn_depth_diffusers, controlnet_depth_diffusers_path),
+                        (flags.cn_openpose, controlnet_openpose_path),
+                        (flags.cn_qr_code, controlnet_qr_code_path),
                     ]:
                         for cn_img, cn_stop, cn_weight in cn_tasks[cn_flag]:
                             positive_cond, negative_cond = core.apply_controlnet(
