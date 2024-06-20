@@ -16,7 +16,7 @@ def load_base64(base64_string: str):
     image = Image.open(BytesIO(image_bytes))
 
     return np.array(image)
- 
+
 
 def handler(input_task: Task):
     import modules.config
@@ -66,7 +66,6 @@ def handler(input_task: Task):
         style.append("Fooocus V2")
 
     worker_args = (
-        False, # generate_image_grid
         req.prompt, # prompt
         req.negative_prompt, # negative_prompt
         style,  # style_selections
@@ -100,12 +99,15 @@ def handler(input_task: Task):
         False, # disable_preview
         False, # disable_intermediate_results
         False, # disable_seed_increment
+        False, # black_out_nsfw
         1.5, # adm_scaler_positive
         0.8, # adm_scaler_negative
         0.3, # adm_scaler_end
         7, # adaptive_cfg
+        2, # clip_skip TODO add to input params
         req.sampler, # sampler_name
         req.scheduler, # scheduler_name
+        None, # vae_name TODO check this
         -1, # overwrite_step
         -1, # overwrite_switch
         -1, # overwrite_width
